@@ -2,14 +2,14 @@
 
 use askama::Template;
 use axum::Form;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use parentcontrol_core::ids::GroupId;
 use parentcontrol_core::rules::{BuiltinProfile, Rule};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{Feedback, Layout, back, changed, render, valid_name};
+use super::{Flash, Icon, Layout, back, done, rejected, render, valid_name};
 use crate::auth::Parent;
 use crate::db::{DEFAULT_PROFILE, groups};
 use crate::error::AppError;
@@ -38,7 +38,7 @@ struct GroupsPage {
 pub(super) async fn page(
     State(state): State<AppState>,
     _: Parent,
-    Query(feedback): Query<Feedback>,
+    flash: Option<Flash>,
 ) -> Result<Response, AppError> {
     let stored = state.db.call(|c| groups::list(c, DEFAULT_PROFILE)).await?;
     let groups = stored
@@ -60,7 +60,7 @@ pub(super) async fn page(
         layout: Layout {
             title: "Группы",
             active: PAGE,
-            error: feedback.error,
+            flash,
         },
         groups,
     };
@@ -94,15 +94,14 @@ pub(super) async fn create(
 ) -> Result<Response, AppError> {
     let name = match valid_name(&form.name) {
         Ok(name) => name,
-        Err(error) => return Ok(back(PAGE, Some(error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, error)),
     };
     let stored = name.clone();
     state
         .db
         .call(move |c| groups::create(c, DEFAULT_PROFILE, &stored))
         .await?;
-    changed(&state, format!("Создана группа: {name}")).await?;
-    Ok(back(PAGE, None).into_response())
+    done(&state, PAGE, format!("Создана группа: {name}")).await
 }
 
 pub(super) async fn rename(
@@ -113,7 +112,7 @@ pub(super) async fn rename(
 ) -> Result<Response, AppError> {
     let name = match valid_name(&form.name) {
         Ok(name) => name,
-        Err(error) => return Ok(back(PAGE, Some(error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, error)),
     };
     let stored = name.clone();
     let old = state
@@ -125,9 +124,14 @@ pub(super) async fn rename(
         })
         .await?;
     if let Some(old) = old {
-        changed(&state, format!("Группа «{old}» переименована в «{name}»")).await?;
+        return done(
+            &state,
+            PAGE,
+            format!("Группа «{old}» переименована в «{name}»"),
+        )
+        .await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 pub(super) async fn delete(
@@ -144,9 +148,9 @@ pub(super) async fn delete(
         })
         .await?;
     if let Some(name) = name {
-        changed(&state, format!("Удалена группа: {name}")).await?;
+        return done(&state, PAGE, format!("Удалена группа: {name}")).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,7 +181,7 @@ pub(super) async fn add_rule(
 ) -> Result<Response, AppError> {
     let rule = match parse_rule(&form) {
         Ok(rule) => rule,
-        Err(error) => return Ok(back(PAGE, Some(&error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, &error)),
     };
     let text = describe(&rule);
     let name = state
@@ -191,13 +195,14 @@ pub(super) async fn add_rule(
         })
         .await?;
     if let Some(name) = name {
-        changed(
+        return done(
             &state,
+            PAGE,
             format!("Группа «{name}»: добавлено правило «{text}»"),
         )
-        .await?;
+        .await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 pub(super) async fn delete_rule(
@@ -206,9 +211,9 @@ pub(super) async fn delete_rule(
     Path(rule): Path<i64>,
 ) -> Result<Response, AppError> {
     if state.db.call(move |c| groups::delete_rule(c, rule)).await? {
-        changed(&state, "Удалено правило".to_owned()).await?;
+        return done(&state, PAGE, "Удалено правило".to_owned()).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 #[cfg(test)]

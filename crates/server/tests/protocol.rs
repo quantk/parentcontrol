@@ -24,17 +24,16 @@ use uuid::Uuid;
 
 const GAMES: GroupId = GroupId::new(1);
 
+/// What precedes the enrollment code on its page.
+const CODE_MARKER: &str = "id=\"enrollment-code\">";
+
 /// Creates a device in the panel and returns its enrollment code.
 async fn new_device(server: &TestServer, cookie: &str, name: &str) -> String {
     let page = server
         .http("POST", "/devices", Some(cookie), &[("name", name)])
         .await;
     assert_eq!(page.status, 200);
-    let start = page
-        .body
-        .find("code-big code\">")
-        .expect("no code on the page")
-        + "code-big code\">".len();
+    let start = page.body.find(CODE_MARKER).expect("no code on the page") + CODE_MARKER.len();
     page.body[start..start + 9].to_owned()
 }
 
@@ -191,10 +190,13 @@ async fn panel_changes_reach_agents_and_usage_reaches_the_panel() {
     }
     let home = server.http("GET", "/", Some(&cookie), &[]).await;
     assert!(
-        home.body.contains("использовано 10 мин"),
+        home.body.contains("Использовано 10 мин"),
         "usage shows on the main page"
     );
-    assert!(home.body.contains("Играют сейчас"));
+    assert!(
+        home.body.contains("Играет") && home.body.contains("badge ok live"),
+        "the running game shows on the main page"
+    );
 
     time_changes_reach_the_agent(&server, &cookie, &mut pc).await;
 

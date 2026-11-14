@@ -5,14 +5,14 @@ use std::time::Duration;
 
 use axum::Form;
 use axum::extract::{Path, State};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use jiff::Timestamp;
 use parentcontrol_core::ids::GroupId;
 use parentcontrol_core::policy::Adjustment;
 use parentcontrol_core::units::{MinuteDelta, Minutes};
 use serde::Deserialize;
 
-use super::{back, changed, status};
+use super::{back, done, rejected, status};
 use crate::auth::Parent;
 use crate::db::groups;
 use crate::error::AppError;
@@ -52,9 +52,10 @@ pub(super) async fn adjust(
     Form(form): Form<AdjustForm>,
 ) -> Result<Response, AppError> {
     if form.minutes == 0 || form.minutes.unsigned_abs() > MAX_MINUTES {
-        return Ok(
-            back(PAGE, Some("Изменение должно быть от 1 минуты до 24 часов.")).into_response(),
-        );
+        return Ok(rejected(
+            PAGE,
+            "Изменение должно быть от 1 минуты до 24 часов.",
+        ));
     }
     apply(
         state,
@@ -72,7 +73,7 @@ pub(super) async fn set_remaining(
     Form(form): Form<RemainingForm>,
 ) -> Result<Response, AppError> {
     if form.minutes > MAX_MINUTES {
-        return Ok(back(PAGE, Some("Остаток не может быть больше 24 часов.")).into_response());
+        return Ok(rejected(PAGE, "Остаток не может быть больше 24 часов."));
     }
     apply(state, group, Request::Remaining(Minutes::new(form.minutes))).await
 }
@@ -122,11 +123,10 @@ async fn apply(
         .await?;
     match outcome {
         Outcome::Applied { name, summary } => {
-            changed(&state, format!("{name}: {summary}")).await?;
-            Ok(back(PAGE, None).into_response())
+            done(&state, PAGE, format!("{name}: {summary}")).await
         }
-        Outcome::Unchanged => Ok(back(PAGE, None).into_response()),
-        Outcome::NoGroup => Ok(back(PAGE, Some("Группа не найдена.")).into_response()),
+        Outcome::Unchanged => Ok(back(PAGE)),
+        Outcome::NoGroup => Ok(rejected(PAGE, "Группа не найдена.")),
     }
 }
 
@@ -191,15 +191,14 @@ async fn set_blocked(
         })
         .await?;
     let Some(name) = name else {
-        return Ok(back(PAGE, Some("Группа не найдена.")).into_response());
+        return Ok(rejected(PAGE, "Группа не найдена."));
     };
     let verb = if blocked {
         "заблокировано"
     } else {
         "разблокировано"
     };
-    changed(&state, format!("{name}: {verb}")).await?;
-    Ok(back(PAGE, None).into_response())
+    done(&state, PAGE, format!("{name}: {verb}")).await
 }
 
 #[cfg(test)]

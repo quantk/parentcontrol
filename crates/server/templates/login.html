@@ -3,24 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Вход — Родительский контроль</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="login">
-    <div class="card">
-      <h1>Родительский контроль</h1>
+  <main class="login-page">
+    <section class="card login-card">
+      <div class="brand">{{ Icon("shield") }}<span>Родительский контроль</span></div>
       {% if no_password %}
       <p>Пароль ещё не задан. Задайте его на сервере:</p>
       <pre>docker compose run --rm server set-password</pre>
       {% else %}
-      {% if failed %}<div class="error">Неверный пароль.</div>{% endif %}
+      {% if failed %}<div class="flash flash-error" role="alert">{{ Icon("alert") }}<span>Неверный пароль.</span></div>{% endif %}
       <form method="post" action="/login">
-        <input type="password" name="password" placeholder="Пароль" autocomplete="current-password" autofocus required>
-        <button type="submit" class="primary">Войти</button>
+        <label class="field">
+          <span>Пароль</span>
+          <input type="password" name="password" autocomplete="current-password" autofocus required>
+        </label>
+        <button type="submit" class="button primary">Войти</button>
       </form>
       {% endif %}
-    </div>
+    </section>
   </main>
 </body>
 </html>

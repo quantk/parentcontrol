@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use askama::Template;
 use axum::Form;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use jiff::civil::Weekday;
 use parentcontrol_core::calendar::TimeOfDay;
@@ -12,7 +12,7 @@ use parentcontrol_core::ids::GroupId;
 use parentcontrol_core::schedule::{DaySchedule, MAX_DAILY_QUOTA, TimeWindow, WeekSchedule};
 use parentcontrol_core::units::Minutes;
 
-use super::{Feedback, Layout, back, changed, format, render};
+use super::{Flash, Icon, Layout, back, done, format, rejected, render};
 use crate::auth::Parent;
 use crate::db::{DEFAULT_PROFILE, groups, settings};
 use crate::error::AppError;
@@ -54,7 +54,7 @@ struct SchedulePage {
 pub(super) async fn page(
     State(state): State<AppState>,
     _: Parent,
-    Query(feedback): Query<Feedback>,
+    flash: Option<Flash>,
 ) -> Result<Response, AppError> {
     let (calendar, stored) = state
         .db
@@ -88,7 +88,7 @@ pub(super) async fn page(
         layout: Layout {
             title: "Расписание",
             active: PAGE,
-            error: feedback.error,
+            flash,
         },
         day_start: calendar.day_start(),
         groups,
@@ -184,7 +184,7 @@ pub(super) async fn save(
         .day_start();
     let schedule = match parse_week(&form, day_start) {
         Ok(schedule) => schedule,
-        Err(error) => return Ok(back(PAGE, Some(&error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, &error)),
     };
     let name = state
         .db
@@ -195,9 +195,9 @@ pub(super) async fn save(
         })
         .await?;
     if let Some(name) = name {
-        changed(&state, format!("Изменено расписание: {name}")).await?;
+        return done(&state, PAGE, format!("Изменено расписание: {name}")).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 #[cfg(test)]

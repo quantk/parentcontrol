@@ -12,7 +12,7 @@ use parentcontrol_core::ids::{DeviceId, GroupId};
 use parentcontrol_core::policy::{self, Adjustment};
 use serde::Deserialize;
 
-use super::{Layout, format, render, status};
+use super::{Icon, Layout, format, render, status};
 use crate::auth::Parent;
 use crate::db::{DEFAULT_PROFILE, actions, devices, groups, settings, usage};
 use crate::error::AppError;
@@ -121,7 +121,7 @@ pub(super) async fn page(
         layout: Layout {
             title: "История",
             active: PAGE,
-            error: None,
+            flash: None,
         },
         days: day_rows(&data, &names),
         selected: format::day(data.selected),

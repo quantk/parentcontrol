@@ -3,23 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  {# History snapshots off: pages always come fresh from the server. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "historyCacheSize": 0, "scrollIntoViewOnBoost": false}'>
   <title>{{ layout.title }} — Родительский контроль</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
-  {% block head %}{% endblock %}
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/panel.js" defer></script>
 </head>
-<body>
-  <header>
-    <nav>
-      {% for (path, label) in [("/", "Главная"), ("/groups", "Группы"), ("/schedule", "Расписание"), ("/devices", "Устройства"), ("/history", "История"), ("/settings", "Настройки")] %}
-      <a href="{{ path }}"{% if *path == layout.active %} class="active"{% endif %}>{{ label }}</a>
+<body hx-boost="true" hx-indicator="#progress">
+  <div id="progress" class="progress" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/">{{ Icon("shield") }}<span>Родительский контроль</span></a>
+    <nav class="tabs" aria-label="Разделы">
+      {# The short label replaces the full one in the tab bar of phones. #}
+      {% for (path, label, short, icon) in [("/", "Главная", "Главная", "home"), ("/history", "История", "История", "chart"), ("/schedule", "Расписание", "График", "calendar"), ("/groups", "Группы", "Группы", "layers"), ("/devices", "Устройства", "ПК", "monitor"), ("/settings", "Настройки", "Настройки", "settings")] %}
+      <a href="{{ path }}"{% if *path == layout.active %} class="active" aria-current="page"{% endif %}>{{ Icon(*icon) }}<span class="label">{{ label }}</span><span class="label-short" aria-hidden="true">{{ short }}</span></a>
       {% endfor %}
-      <form method="post" action="/logout"><button type="submit">Выйти</button></form>
     </nav>
+    <form class="logout" method="post" action="/logout">
+      <button type="submit" class="button ghost icon-only" title="Выйти" aria-label="Выйти">{{ Icon("logout") }}</button>
+    </form>
   </header>
   <main>
-    {% if let Some(error) = layout.error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
+    <div id="flash" class="flash-area" aria-live="polite">
+      {% if let Some(flash) = layout.flash %}
+      <div class="flash {% if flash.is_error() %}flash-error{% else %}flash-done{% endif %}" role="status">
+        {% if flash.is_error() %}{{ Icon("alert") }}{% else %}{{ Icon("check") }}{% endif %}
+        <span>{{ flash.text }}</span>
+        <button type="button" class="flash-close" data-dismiss aria-label="Закрыть">{{ Icon("close") }}</button>
+      </div>
+      {% endif %}
+    </div>
     {% block content %}{% endblock %}
   </main>
 </body>

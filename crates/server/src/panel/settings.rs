@@ -2,14 +2,14 @@
 
 use askama::Template;
 use axum::Form;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use jiff::tz::TimeZone;
 use parentcontrol_core::calendar::{Calendar, TimeOfDay};
 use parentcontrol_core::schedule::DaySchedule;
 use serde::Deserialize;
 
-use super::{Feedback, Layout, back, changed, render};
+use super::{Flash, Icon, Layout, back, changed, done, rejected, render};
 use crate::auth::{Parent, PasswordError, hash_password, verify_password};
 use crate::db::{DEFAULT_PROFILE, DbError, groups, sessions, settings};
 use crate::error::AppError;
@@ -28,14 +28,14 @@ struct SettingsPage {
 pub(super) async fn page(
     State(state): State<AppState>,
     _: Parent,
-    Query(feedback): Query<Feedback>,
+    flash: Option<Flash>,
 ) -> Result<Response, AppError> {
     let calendar = state.db.call(|c| settings::required_calendar(c)).await?;
     let page = SettingsPage {
         layout: Layout {
             title: "Настройки",
             active: PAGE,
-            error: feedback.error,
+            flash,
         },
         time_zone: calendar.time_zone().iana_name().unwrap_or("UTC").to_owned(),
         day_start: calendar.day_start(),
@@ -56,7 +56,7 @@ pub(super) async fn password(
     Form(form): Form<PasswordForm>,
 ) -> Result<Response, AppError> {
     if form.new != form.repeat {
-        return Ok(back(PAGE, Some("Новые пароли не совпадают.")).into_response());
+        return Ok(rejected(PAGE, "Новые пароли не совпадают."));
     }
     let db = state.db.clone();
     let current = form.current;
@@ -73,7 +73,7 @@ pub(super) async fn password(
         })
         .await?;
     if !verified {
-        return Ok(back(PAGE, Some("Текущий пароль неверен.")).into_response());
+        return Ok(rejected(PAGE, "Текущий пароль неверен."));
     }
     let hash = match tokio::task::spawn_blocking(move || hash_password(&form.new))
         .await
@@ -81,7 +81,7 @@ pub(super) async fn password(
     {
         Ok(hash) => hash,
         Err(PasswordError::TooShort) => {
-            return Ok(back(PAGE, Some(&PasswordError::TooShort.to_string())).into_response());
+            return Ok(rejected(PAGE, &PasswordError::TooShort.to_string()));
         }
         Err(error) => return Err(error.into()),
     };
@@ -94,7 +94,7 @@ pub(super) async fn password(
         })
         .await?;
     changed(&state, "Изменён пароль".to_owned()).await?;
-    Ok(back("/login", None).into_response())
+    Ok(back("/login"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,14 +109,13 @@ pub(super) async fn calendar(
     Form(form): Form<CalendarForm>,
 ) -> Result<Response, AppError> {
     let Ok(zone) = TimeZone::get(form.time_zone.trim()) else {
-        return Ok(back(
+        return Ok(rejected(
             PAGE,
-            Some("Неизвестный часовой пояс; нужен идентификатор вроде Europe/Moscow."),
-        )
-        .into_response());
+            "Неизвестный часовой пояс; нужен идентификатор вроде Europe/Moscow.",
+        ));
     };
     let Ok(day_start) = form.day_start.trim().parse::<TimeOfDay>() else {
-        return Ok(back(PAGE, Some("Начало суток нужно указать как ЧЧ:ММ.")).into_response());
+        return Ok(rejected(PAGE, "Начало суток нужно указать как ЧЧ:ММ."));
     };
     let calendar = Calendar::new(zone, day_start);
     let conflict = state
@@ -141,15 +140,15 @@ pub(super) async fn calendar(
         let error = format!(
             "В расписании группы «{group}» есть окно, которое пересечёт новое начало суток. Сначала измените расписание."
         );
-        return Ok(back(PAGE, Some(&error)).into_response());
+        return Ok(rejected(PAGE, &error));
     }
-    changed(
+    done(
         &state,
+        PAGE,
         format!(
             "Часовой пояс {}, начало суток {day_start}",
             form.time_zone.trim()
         ),
     )
-    .await?;
-    Ok(back(PAGE, None).into_response())
+    .await
 }

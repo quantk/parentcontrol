@@ -4,8 +4,10 @@
 mod agents;
 mod auth;
 mod config;
+mod cookie;
 mod db;
 mod error;
+mod headers;
 mod health;
 mod panel;
 mod secret;
@@ -116,6 +118,7 @@ impl Server {
             .merge(panel::routes())
             .route("/api/agent", get(agents::upgrade))
             .route("/healthz", get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(headers::harden))
             .with_state(state);
 
         let handle = Handle::new();

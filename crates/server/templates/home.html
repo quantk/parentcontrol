@@ -1,63 +1,118 @@
 {% extends "base.html" %}
 
-{% block head %}<meta http-equiv="refresh" content="30">{% endblock %}
-
 {% block content %}
-<h1>Сегодня, {{ today }}</h1>
+<div class="page-head">
+  <div>
+    <h1>Сегодня</h1>
+    <p>{{ today }}</p>
+  </div>
+</div>
+
+{# While the page is visible, its status parts refresh from the server;
+   forms are outside them, so typing is never interrupted. #}
+<div hidden hx-get="/" hx-trigger="every 15s" hx-select-oob="{{ live_parts }}" hx-swap="none" hx-push-url="false" data-poll></div>
 
 {% if groups.is_empty() %}
-<div class="card">
+<section class="card empty">
+  {{ Icon("layers") }}
   <p>Групп программ пока нет. <a href="/groups">Создайте группу</a>, например «Игры» с Minecraft.</p>
-</div>
+</section>
 {% endif %}
 
 <div class="grid">
   {% for group in groups %}
-  <section class="card">
-    <h2>{{ group.name }}</h2>
-    <div class="big">{{ group.remaining }}</div>
-    <div class="muted">осталось · использовано {{ group.used }} из {{ group.allowance }}</div>
-    <p class="{{ group.tone }}">{{ group.state }}</p>
-    <div class="actions">
-      {% for minutes in adjustments %}
-      <form method="post" action="/groups/{{ group.id }}/adjust">
-        <input type="hidden" name="minutes" value="{{ minutes }}">
-        <button type="submit">{% if *minutes > 0 %}+{{ minutes }}{% else %}−{{ minutes.unsigned_abs() }}{% endif %} мин</button>
+  {# Actions replace only this card and the message area. #}
+  <section class="card group-card" id="group-{{ group.id }}"
+           hx-target="this" hx-select="#group-{{ group.id }}" hx-swap="outerHTML" hx-select-oob="#flash" hx-push-url="false">
+    <div id="status-{{ group.id }}" class="group-status">
+      <div class="card-head">
+        <h2>{{ group.name }}</h2>
+        <span class="badge {{ group.state.tone }}">{{ group.state.badge }}</span>
+      </div>
+
+      <div class="remaining">
+        <span class="remaining-value">{{ group.remaining }}</span>
+        <span class="muted">осталось</span>
+      </div>
+      <div class="meter {{ group.fill }}" role="meter" aria-label="Использовано сегодня"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ group.used_percent }}">
+        <span style="--share: {{ group.used_percent }}%"></span>
+      </div>
+      <p class="muted small">Использовано {{ group.used }} из {{ group.allowance }}. {{ group.state.detail }}</p>
+
+      <div class="week" aria-label="Последние 7 дней, всего {{ group.week_total }}">
+        <div class="week-head small"><span class="muted">7 дней</span><span class="muted">всего {{ group.week_total }}</span></div>
+        <div class="week-bars">
+          {% for bar in group.week %}
+          <div class="week-day{% if bar.today %} today{% endif %}" tabindex="0" data-tip="{{ bar.tip }}">
+            <div class="week-track"><span style="--share: {{ bar.height }}%"></span></div>
+            <span class="week-label">{{ bar.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="controls">
+      <div class="control-row">
+        <span class="control-label">Изменить время на сегодня</span>
+        <div class="segmented" role="group" aria-label="Изменить время на сегодня">
+          {% for minutes in adjustments %}
+          <form method="post" action="/groups/{{ group.id }}/adjust">
+            <input type="hidden" name="minutes" value="{{ minutes }}">
+            <button type="submit" class="button small">{% if *minutes > 0 %}+{{ minutes }}{% else %}−{{ minutes.unsigned_abs() }}{% endif %}</button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      <form class="control-row" method="post" action="/groups/{{ group.id }}/remaining">
+        <label class="control-label" for="remaining-{{ group.id }}">Оставить на сегодня</label>
+        <div class="input-group">
+          <input id="remaining-{{ group.id }}" type="number" name="minutes" min="0" max="1440" step="5"
+                 value="{{ group.remaining_minutes }}" required inputmode="numeric">
+          <span class="suffix">мин</span>
+          <button type="submit" class="button small">Задать</button>
+        </div>
       </form>
-      {% endfor %}
-      {% if group.blocked %}
-      <form method="post" action="/groups/{{ group.id }}/unblock"><button type="submit" class="primary">Разблокировать</button></form>
-      {% else %}
-      <form method="post" action="/groups/{{ group.id }}/block"><button type="submit" class="danger">Заблокировать</button></form>
-      {% endif %}
+      <div class="control-row">
+        {% if group.blocked %}
+        <form method="post" action="/groups/{{ group.id }}/unblock">
+          <button type="submit" class="button small primary">{{ Icon("unlock") }}<span>Снять блокировку</span></button>
+        </form>
+        {% else %}
+        <form method="post" action="/groups/{{ group.id }}/block"
+              hx-confirm="Заблокировать «{{ group.name }}»? Запущенные программы закроются.">
+          <button type="submit" class="button small danger">{{ Icon("lock") }}<span>Заблокировать</span></button>
+        </form>
+        {% endif %}
+      </div>
     </div>
   </section>
   {% endfor %}
 </div>
 
-<section class="card">
-  <h2>Играют сейчас</h2>
-  {% if playing.is_empty() %}
-  <p class="muted">Никто.</p>
-  {% else %}
-  <ul class="plain">
-    {% for row in playing %}<li><span>{{ row.device }}</span><span>{{ row.groups }}</span></li>{% endfor %}
-  </ul>
-  {% endif %}
-</section>
-
-<section class="card">
-  <h2>Устройства</h2>
+<section class="card" id="devices">
+  <div class="card-head">
+    <h2>Устройства</h2>
+    <a class="small" href="/devices">Все настройки</a>
+  </div>
   {% if devices.is_empty() %}
   <p class="muted">Нет подключённых устройств. <a href="/devices">Подключить</a>.</p>
   {% else %}
-  <ul class="plain">
+  <ul class="list">
     {% for device in devices %}
     <li>
-      <span>{{ device.name }}{% if !device.configured %} <span class="warn">· не настроено</span>{% endif %}</span>
-      {% if device.online %}<span class="ok">в сети</span>
-      {% else if device.stale %}<span class="bad">нет связи · {{ device.seen }}</span>
-      {% else %}<span class="muted">{{ device.seen }}</span>{% endif %}
+      <span class="primary-text">
+        {{ Icon("monitor") }}
+        <span>
+          <strong>{{ device.name }}</strong>
+          <span class="muted small"> · {{ device.detail }}</span>
+          {% if device.unconfigured %}<span class="text-warn small"> · не настроено</span>{% endif %}
+        </span>
+      </span>
+      <span class="badge {{ device.tone }}">{{ device.badge }}</span>
     </li>
     {% endfor %}
   </ul>

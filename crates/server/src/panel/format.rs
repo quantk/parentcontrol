@@ -39,6 +39,35 @@ pub(super) fn day(day: BudgetDay) -> String {
     )
 }
 
+/// `суббота, 14 ноября`.
+pub(super) fn long_day(day: BudgetDay) -> String {
+    let date = day.date();
+    format!(
+        "{}, {} {}",
+        weekday(day.weekday()).to_lowercase(),
+        date.day(),
+        month_genitive(date.month())
+    )
+}
+
+/// Russian month name in the genitive, as used after a day number.
+const fn month_genitive(month: i8) -> &'static str {
+    match month {
+        1 => "января",
+        2 => "февраля",
+        3 => "марта",
+        4 => "апреля",
+        5 => "мая",
+        6 => "июня",
+        7 => "июля",
+        8 => "августа",
+        9 => "сентября",
+        10 => "октября",
+        11 => "ноября",
+        _ => "декабря",
+    }
+}
+
 /// How long ago `moment` was: `только что`, `5 мин назад`, `3 ч назад`.
 pub(super) fn ago(moment: Timestamp, now: Timestamp) -> String {
     let seconds = now.as_second().saturating_sub(moment.as_second()).max(0);
@@ -63,7 +92,7 @@ pub(super) const fn weekday(weekday: Weekday) -> &'static str {
     }
 }
 
-const fn weekday_short(weekday: Weekday) -> &'static str {
+pub(super) const fn weekday_short(weekday: Weekday) -> &'static str {
     match weekday {
         Weekday::Monday => "пн",
         Weekday::Tuesday => "вт",
@@ -99,6 +128,14 @@ mod tests {
         assert_eq!(ago(before(300), now), "5 мин назад");
         assert_eq!(ago(before(7200), now), "2 ч назад");
         assert_eq!(ago(before(200_000), now), "2 дн назад");
+    }
+
+    #[test]
+    fn long_day_reads_as_a_date() {
+        assert_eq!(
+            long_day(BudgetDay::new(jiff::civil::date(2026, 11, 14))),
+            "суббота, 14 ноября"
+        );
     }
 
     #[test]

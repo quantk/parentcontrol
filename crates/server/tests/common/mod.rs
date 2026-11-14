@@ -87,11 +87,32 @@ impl TestServer {
         cookie: Option<&str>,
         form: &[(&str, &str)],
     ) -> Response {
+        let cookie = cookie.map(|cookie| ("Cookie", cookie));
+        self.request(method, path, cookie.as_slice(), form).await
+    }
+
+    /// Sends one HTTP request with extra `headers` and no body.
+    pub(crate) async fn http_with_headers(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+    ) -> Response {
+        self.request(method, path, headers, &[]).await
+    }
+
+    async fn request(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+        form: &[(&str, &str)],
+    ) -> Response {
         let body = serde_urlencoded::to_string(form).unwrap();
         let mut request =
             format!("{method} {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n");
-        if let Some(cookie) = cookie {
-            let _ = write!(request, "Cookie: {cookie}\r\n");
+        for (name, value) in headers {
+            let _ = write!(request, "{name}: {value}\r\n");
         }
         if method == "POST" {
             request.push_str("Content-Type: application/x-www-form-urlencoded\r\n");

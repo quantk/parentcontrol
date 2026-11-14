@@ -10,8 +10,8 @@ use axum::response::{IntoResponse, Redirect, Response};
 use jiff::Timestamp;
 use serde::Deserialize;
 
-use super::render;
-use crate::auth::{Parent, session_cookie, verify_password};
+use super::{Icon, render};
+use crate::auth::{Parent, end_session_cookie, session_cookie, verify_password};
 use crate::db::{DbError, sessions, settings};
 use crate::error::AppError;
 use crate::secret;
@@ -100,9 +100,5 @@ pub(super) async fn logout(
         .db
         .call(move |c| sessions::delete(c, &parent.session_hash))
         .await?;
-    Ok((
-        [(SET_COOKIE, session_cookie("", Duration::ZERO))],
-        Redirect::to("/login"),
-    )
-        .into_response())
+    Ok(([(SET_COOKIE, end_session_cookie())], Redirect::to("/login")).into_response())
 }

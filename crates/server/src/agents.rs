@@ -5,5 +5,5 @@ mod hub;
 mod policy;
 mod socket;
 
-pub(crate) use hub::Hub;
+pub(crate) use hub::{Hub, Live};
 pub(crate) use socket::upgrade;

@@ -3,19 +3,19 @@
 use std::time::Duration;
 
 use axum::extract::FromRequestParts;
-use axum::http::header::COOKIE;
+use axum::http::HeaderValue;
 use axum::http::request::Parts;
-use axum::http::{HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Redirect, Response};
 use jiff::Timestamp;
 
+use crate::cookie;
 use crate::db::sessions;
 use crate::error::AppError;
 use crate::secret;
 use crate::state::AppState;
 
 /// Name of the session cookie.
-pub(crate) const SESSION_COOKIE: &str = "parentcontrol_session";
+const SESSION_COOKIE: &str = "parentcontrol_session";
 
 /// A request made by the logged-in parent.
 #[derive(Debug)]
@@ -31,7 +31,7 @@ impl FromRequestParts<AppState> for Parent {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let Some(token) = session_token(&parts.headers) else {
+        let Some(token) = cookie::find(&parts.headers, SESSION_COOKIE) else {
             return Err(Redirect::to("/login").into_response());
         };
         let session_hash = secret::hash(&token);
@@ -49,31 +49,15 @@ impl FromRequestParts<AppState> for Parent {
     }
 }
 
-/// The session token sent by the browser, if any.
-pub(crate) fn session_token(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get_all(COOKIE)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|cookies| cookies.split(';'))
-        .find_map(|cookie| {
-            let (name, value) = cookie.trim().split_once('=')?;
-            (name == SESSION_COOKIE).then(|| value.to_owned())
-        })
+/// A `Set-Cookie` value carrying session `token` for `lifetime`.
+pub(crate) fn session_cookie(token: &str, lifetime: Duration) -> HeaderValue {
+    // Tokens are hex, so they are always valid cookie values.
+    cookie::set(SESSION_COOKIE, token, lifetime).unwrap_or_else(|| cookie::delete(SESSION_COOKIE))
 }
 
-/// A `Set-Cookie` value carrying `token` for `lifetime`; an empty token
-/// with zero lifetime deletes the cookie.
-///
-/// `SameSite=Strict` keeps other sites from submitting the panel's forms
-/// with the parent's session, so the forms need no separate CSRF token.
-pub(crate) fn session_cookie(token: &str, lifetime: Duration) -> HeaderValue {
-    let cookie = format!(
-        "{SESSION_COOKIE}={token}; Path=/; Max-Age={}; HttpOnly; Secure; SameSite=Strict",
-        lifetime.as_secs()
-    );
-    // Tokens are hex, so the value is always a valid header.
-    HeaderValue::from_str(&cookie).unwrap_or_else(|_| HeaderValue::from_static(""))
+/// A `Set-Cookie` value ending the session in the browser.
+pub(crate) fn end_session_cookie() -> HeaderValue {
+    cookie::delete(SESSION_COOKIE)
 }
 
 #[cfg(test)]
@@ -81,26 +65,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn finds_the_session_among_other_cookies() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            COOKIE,
-            HeaderValue::from_static("theme=dark; parentcontrol_session=abc123; x=y"),
+    fn the_session_cookie_carries_the_token_and_ending_it_clears_it() {
+        let cookie = session_cookie("abc123", Duration::from_hours(1));
+        assert!(
+            cookie
+                .to_str()
+                .unwrap()
+                .starts_with("parentcontrol_session=abc123;")
         );
-        assert_eq!(session_token(&headers).as_deref(), Some("abc123"));
-    }
-
-    #[test]
-    fn no_cookie_means_no_session() {
-        assert_eq!(session_token(&HeaderMap::new()), None);
-    }
-
-    #[test]
-    fn cookie_is_locked_down() {
-        let cookie = session_cookie("abc", Duration::from_hours(1));
-        let text = cookie.to_str().unwrap();
-        for attribute in ["HttpOnly", "Secure", "SameSite=Strict", "Max-Age=3600"] {
-            assert!(text.contains(attribute), "{text}");
-        }
+        let ended = end_session_cookie();
+        let ended = ended.to_str().unwrap();
+        assert!(ended.starts_with("parentcontrol_session=;") && ended.contains("Max-Age=0"));
     }
 }

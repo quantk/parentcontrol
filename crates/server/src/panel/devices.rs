@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use askama::Template;
 use axum::Form;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::http::header::HOST;
 use axum::response::{IntoResponse, Response};
@@ -13,15 +13,18 @@ use parentcontrol_core::ids::DeviceId;
 use parentcontrol_core::process::OsUser;
 use serde::Deserialize;
 
-use super::home::STALE_AFTER;
-use super::{Feedback, Layout, back, changed, format, render, valid_name};
+use super::presence::Presence;
+use super::{Flash, Icon, Layout, back, changed, done, format, rejected, render, valid_name};
 use crate::auth::Parent;
-use crate::db::{DEFAULT_PROFILE, devices, settings};
+use crate::db::{DEFAULT_PROFILE, devices, groups, settings};
 use crate::error::AppError;
 use crate::secret;
 use crate::state::AppState;
 
 const PAGE: &str = "/devices";
+
+/// Tells htmx which address to show for a swapped page.
+const HX_PUSH_URL: &str = "hx-push-url";
 
 /// How long an enrollment code stays valid.
 const CODE_LIFETIME: Duration = Duration::from_mins(30);
@@ -30,9 +33,9 @@ struct DeviceView {
     id: DeviceId,
     name: String,
     platform: String,
-    online: bool,
-    seen: String,
-    stale: bool,
+    badge: &'static str,
+    tone: &'static str,
+    detail: String,
     enrolled: bool,
     bound: Vec<String>,
     unbound: Vec<String>,
@@ -60,42 +63,51 @@ struct EnrollPage {
 pub(super) async fn page(
     State(state): State<AppState>,
     _: Parent,
-    Query(feedback): Query<Feedback>,
+    flash: Option<Flash>,
 ) -> Result<Response, AppError> {
     let now = Timestamp::now();
-    let stored = state.db.call(|c| devices::list(c)).await?;
+    let (stored, groups) = state
+        .db
+        .call(|c| Ok((devices::list(c)?, groups::list(c, DEFAULT_PROFILE)?)))
+        .await?;
     let live = state.hub.live();
+    let group_name = |id| {
+        groups
+            .iter()
+            .find(|group| group.id == id)
+            .map_or("удалённая группа", |group| {
+                group.name.as_str()
+            })
+    };
     let devices = stored
         .into_iter()
-        .map(|device| DeviceView {
-            online: live.contains_key(&device.id),
-            seen: device
-                .last_seen
-                .map_or_else(|| "никогда".to_owned(), |seen| format::ago(seen, now)),
-            stale: device.enrolled
-                && device
-                    .last_seen
-                    .is_none_or(|seen| now.duration_since(seen).unsigned_abs() > STALE_AFTER),
-            platform: device
-                .platform
-                .map_or_else(String::new, |platform| platform.to_string()),
-            unbound: device
-                .local_users
-                .iter()
-                .filter(|user| !device.bindings.contains(*user))
-                .map(ToString::to_string)
-                .collect(),
-            bound: device.bindings.iter().map(ToString::to_string).collect(),
-            enrolled: device.enrolled,
-            name: device.name,
-            id: device.id,
+        .map(|device| {
+            let presence = Presence::of(&device, live.get(&device.id), now, group_name);
+            DeviceView {
+                badge: presence.label(),
+                tone: presence.tone(),
+                detail: presence.detail(),
+                platform: device
+                    .platform
+                    .map_or_else(String::new, |platform| platform.to_string()),
+                unbound: device
+                    .local_users
+                    .iter()
+                    .filter(|user| !device.bindings.contains(*user))
+                    .map(ToString::to_string)
+                    .collect(),
+                bound: device.bindings.iter().map(ToString::to_string).collect(),
+                enrolled: device.enrolled,
+                name: device.name,
+                id: device.id,
+            }
         })
         .collect();
     let page = DevicesPage {
         layout: Layout {
             title: "Устройства",
             active: PAGE,
-            error: feedback.error,
+            flash,
         },
         devices,
         fingerprint: grouped(&state.fingerprint),
@@ -126,7 +138,7 @@ pub(super) async fn create(
 ) -> Result<Response, AppError> {
     let name = match valid_name(&form.name) {
         Ok(name) => name,
-        Err(error) => return Ok(back(PAGE, Some(error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, error)),
     };
     let code = secret::enrollment_code()?;
     let (hash, expires) = (secret::hash(&secret::normalize_code(&code)), expires());
@@ -159,7 +171,7 @@ pub(super) async fn new_code(
         })
         .await?;
     let Some(name) = name else {
-        return Ok(back(PAGE, Some("Устройство не найдено.")).into_response());
+        return Ok(rejected(PAGE, "Устройство не найдено."));
     };
     enroll_page(&state, name, code, expires, &headers).await
 }
@@ -191,7 +203,7 @@ async fn enroll_page(
         layout: Layout {
             title: "Подключение устройства",
             active: PAGE,
-            error: None,
+            flash: None,
         },
         name,
         code,
@@ -199,7 +211,9 @@ async fn enroll_page(
         server: format!("https://{host}"),
         fingerprint: grouped(&state.fingerprint),
     };
-    Ok(render(&page)?.into_response())
+    // The page answers a POST; keep the address of the device list so
+    // that reloading does not resend the form.
+    Ok(([(HX_PUSH_URL, "false")], render(&page)?).into_response())
 }
 
 pub(super) async fn rename(
@@ -210,7 +224,7 @@ pub(super) async fn rename(
 ) -> Result<Response, AppError> {
     let name = match valid_name(&form.name) {
         Ok(name) => name,
-        Err(error) => return Ok(back(PAGE, Some(error)).into_response()),
+        Err(error) => return Ok(rejected(PAGE, error)),
     };
     let stored = name.clone();
     if state
@@ -218,9 +232,9 @@ pub(super) async fn rename(
         .call(move |c| devices::rename(c, device, &stored))
         .await?
     {
-        changed(&state, format!("Устройство переименовано: {name}")).await?;
+        return done(&state, PAGE, format!("Устройство переименовано: {name}")).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 pub(super) async fn delete(
@@ -229,9 +243,9 @@ pub(super) async fn delete(
     Path(device): Path<DeviceId>,
 ) -> Result<Response, AppError> {
     if state.db.call(move |c| devices::delete(c, device)).await? {
-        changed(&state, "Удалено устройство".to_owned()).await?;
+        return done(&state, PAGE, "Удалено устройство".to_owned()).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,12 +276,12 @@ pub(super) async fn bind(
         })
         .await?;
     if !known {
-        return Ok(
-            back(PAGE, Some("Такой учётной записи устройство не сообщало.")).into_response(),
-        );
+        return Ok(rejected(
+            PAGE,
+            "Такой учётной записи устройство не сообщало.",
+        ));
     }
-    changed(&state, format!("Привязана учётная запись {user}")).await?;
-    Ok(back(PAGE, None).into_response())
+    done(&state, PAGE, format!("Привязана учётная запись {user}")).await
 }
 
 pub(super) async fn unbind(
@@ -283,9 +297,9 @@ pub(super) async fn unbind(
         .call(move |c| devices::unbind(c, device, &stored))
         .await?
     {
-        changed(&state, format!("Отвязана учётная запись {user}")).await?;
+        return done(&state, PAGE, format!("Отвязана учётная запись {user}")).await;
     }
-    Ok(back(PAGE, None).into_response())
+    Ok(back(PAGE))
 }
 
 #[cfg(test)]
