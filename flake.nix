@@ -46,6 +46,11 @@
             # Windows flags into host builds.
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${mingw.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS = "-L native=${mingw.windows.pthreads}/lib";
+            # rustc calls `x86_64-w64-mingw32-dlltool` by name for import
+            # libraries; the unwrapped binutils carry no setup hooks.
+            shellHook = ''
+              export PATH="${mingw.stdenv.cc.bintools.bintools}/bin:$PATH"
+            '';
           };
         }
       );

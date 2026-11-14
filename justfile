@@ -31,7 +31,7 @@ clippy-windows:
 
 # Run the test suite.
 test:
-    cargo test --workspace --locked
+    cargo test --workspace --locked --quiet
 
 # Cross-compile the Windows binaries to prove they link.
 build-windows:
