@@ -5,3 +5,4 @@
 # The image's toolchain builds the server; rustup would otherwise fetch the
 # pinned one with its extra Windows and musl targets.
 /rust-toolchain.toml
+.env

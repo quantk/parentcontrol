@@ -102,11 +102,11 @@ mod tests {
 
     #[test]
     fn parses_host_and_port() {
-        let endpoint = parse("https://192.168.1.135:8443").unwrap();
-        assert_eq!(endpoint.address(), "192.168.1.135:8443");
+        let endpoint = parse("https://192.168.1.10:8443").unwrap();
+        assert_eq!(endpoint.address(), "192.168.1.10:8443");
         assert_eq!(
             endpoint.websocket_url(),
-            "wss://192.168.1.135:8443/api/agent"
+            "wss://192.168.1.10:8443/api/agent"
         );
         assert_eq!(
             parse("https://home.lan/").unwrap().address(),

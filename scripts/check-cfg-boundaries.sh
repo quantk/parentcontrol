@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Platform-specific code belongs in `platform/` modules only (PLAN.md, section 6).
+# Platform-specific code belongs in `platform/` modules only.
 # Fails if an OS-dependent `cfg` appears anywhere else under `crates/`.
 set -euo pipefail
 

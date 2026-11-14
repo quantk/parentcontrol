@@ -1,5 +1,8 @@
 # Developer commands. Run `just` to list them.
 
+# Local settings such as the deploy target; `.env` is not committed.
+set dotenv-load
+
 windows_target := "x86_64-pc-windows-gnu"
 # The server runs only in a Linux container; everything else ships to Windows too.
 windows_crates := "-p parentcontrol-core -p parentcontrol-agent -p parentcontrol-tray"
@@ -59,14 +62,19 @@ dist-windows:
     mkdir -p target/dist/windows
     cp target/{{windows_target}}/release/parentcontrol-agent.exe target/{{windows_target}}/release/parentcontrol-tray.exe target/dist/windows/
 
-server_host := "quantick@192.168.1.135"
+# Where `just deploy` ships the server: the SSH destination and the address
+# the panel is published on. Set them in `.env` (see `.env.example`).
+deploy_host := env("PARENTCONTROL_DEPLOY_HOST", "")
+deploy_bind := env("PARENTCONTROL_BIND", "")
 
 # The data stays in its Docker volume; only the code is replaced.
 # Ship the committed tree to the home server and restart the container there.
 deploy:
+    @test -n "{{deploy_host}}" || { echo "Set PARENTCONTROL_DEPLOY_HOST (user@host) in .env." >&2; exit 1; }
+    @test -n "{{deploy_bind}}" || { echo "Set PARENTCONTROL_BIND (the server LAN address) in .env." >&2; exit 1; }
     git diff --quiet HEAD || { echo "Commit first: deploy ships the committed tree." >&2; exit 1; }
-    git archive --format=tar HEAD | ssh {{server_host}} 'rm -rf ~/parentcontrol.new && mkdir ~/parentcontrol.new && tar -x -C ~/parentcontrol.new && rm -rf ~/parentcontrol && mv ~/parentcontrol.new ~/parentcontrol'
-    ssh {{server_host}} 'cd ~/parentcontrol/deploy && docker compose up -d --build'
+    git archive --format=tar HEAD | ssh {{deploy_host}} 'rm -rf ~/parentcontrol.new && mkdir ~/parentcontrol.new && tar -x -C ~/parentcontrol.new && rm -rf ~/parentcontrol && mv ~/parentcontrol.new ~/parentcontrol'
+    ssh {{deploy_host}} 'cd ~/parentcontrol/deploy && PARENTCONTROL_BIND={{deploy_bind}} docker compose up -d --build'
 
 # Use the repository's git hooks (run once per clone).
 install-hooks:

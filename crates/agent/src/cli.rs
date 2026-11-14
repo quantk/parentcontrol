@@ -29,7 +29,7 @@ pub(crate) enum Command {
     Uninstall,
     /// Join the server with a code from the parent's panel.
     Enroll {
-        /// The server, such as `https://192.168.1.135:8443`.
+        /// The server, such as `https://192.168.1.10:8443`.
         #[arg(long, value_parser = parse_endpoint)]
         server: Endpoint,
         /// The enrollment code shown in the panel.

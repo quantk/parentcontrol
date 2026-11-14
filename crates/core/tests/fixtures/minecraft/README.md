@@ -6,7 +6,7 @@ as the Minecraft client, every file in `not-game/` must not; the test in
 `crates/core/src/rules/minecraft/tests.rs` picks up new files automatically.
 
 Files marked "Synthesized" were written from the launchers' argument
-templates. Replace them with real captures (PLAN.md, section 9.2):
+templates. Replace them with real captures:
 
 ```sh
 # Linux, while the game runs (the PID is the java process, not the launcher):

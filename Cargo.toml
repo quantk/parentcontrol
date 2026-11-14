@@ -84,7 +84,7 @@ unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
-# Restriction lints that back the code-quality rules in PLAN.md section 6.
+# Restriction lints that keep panics, unwraps and unchecked unsafe out of the code.
 undocumented_unsafe_blocks = "deny"
 unwrap_used = "warn"
 expect_used = "warn"

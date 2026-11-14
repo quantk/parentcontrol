@@ -1,7 +1,7 @@
 # NixOS module: the agent as a system service and the tray in every
 # graphical session. Enroll once after enabling:
 #
-#   sudo parentcontrol-agent enroll --server https://192.168.1.135:8443 --code XXXX-XXXX
+#   sudo parentcontrol-agent enroll --server https://192.168.1.10:8443 --code XXXX-XXXX
 { self }:
 {
   config,

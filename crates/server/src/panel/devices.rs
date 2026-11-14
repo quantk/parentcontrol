@@ -198,7 +198,7 @@ async fn enroll_page(
     let host = headers
         .get(HOST)
         .and_then(|host| host.to_str().ok())
-        .unwrap_or("192.168.1.135:8443");
+        .unwrap_or("localhost:8443");
     let page = EnrollPage {
         layout: Layout {
             title: "Подключение устройства",

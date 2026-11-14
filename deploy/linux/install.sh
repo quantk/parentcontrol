@@ -7,7 +7,7 @@
 #
 # Then enroll the PC with the code from the panel:
 #
-#   sudo parentcontrol-agent enroll --server https://192.168.1.135:8443 --code XXXX-XXXX
+#   sudo parentcontrol-agent enroll --server https://192.168.1.10:8443 --code XXXX-XXXX
 set -eu
 
 here=$(dirname "$0")
