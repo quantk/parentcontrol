@@ -1,0 +1,26 @@
+{
+  "time_zone": "Europe/Moscow",
+  "day_start": "04:00",
+  "accounts": ["kid"],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Игры",
+      "rules": [
+        { "builtin": "minecraft_java" },
+        { "executable": "supertuxkart" }
+      ],
+      "schedule": {
+        "monday":    { "quota": 60,  "windows": [{ "start": "16:00", "end": "20:00" }] },
+        "tuesday":   { "quota": 60,  "windows": [{ "start": "16:00", "end": "20:00" }] },
+        "wednesday": { "quota": 60,  "windows": [{ "start": "16:00", "end": "20:00" }] },
+        "thursday":  { "quota": 60,  "windows": [{ "start": "16:00", "end": "20:00" }] },
+        "friday":    { "quota": 90,  "windows": [{ "start": "16:00", "end": "22:00" }] },
+        "saturday":  { "quota": 120, "windows": [{ "start": "10:00", "end": "22:00" }] },
+        "sunday":    { "quota": 120, "windows": [{ "start": "10:00", "end": "21:00" }] }
+      },
+      "blocked": false,
+      "bonuses": [{ "day": "2026-11-14", "minutes": 15 }]
+    }
+  ]
+}

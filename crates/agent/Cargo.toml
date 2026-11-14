@@ -9,6 +9,22 @@ publish.workspace = true
 
 [dependencies]
 parentcontrol-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+jiff.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+# Random ids for new usage records.
+uuid = { workspace = true, features = ["v4"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
