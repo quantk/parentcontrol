@@ -170,10 +170,12 @@ impl GroupState {
         actions: &mut Vec<Action>,
     ) {
         let group = observation.status.group;
-        if !self.terminating.is_empty() {
-            self.terminating.clear();
+        // Only a soft close in progress can be called off; a forced
+        // termination has already happened.
+        if self.terminating.values().any(|left| !left.is_zero()) {
             actions.push(Action::Notify(Notice::CloseCancelled { group }));
         }
+        self.terminating.clear();
 
         // The smallest threshold `stop_in` has reached, if any.
         let Some(threshold) = WARNINGS

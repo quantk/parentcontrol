@@ -6,6 +6,7 @@
 //! server can merge them idempotently after an offline period.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::time::Duration;
 
 use jiff::Timestamp;
@@ -37,6 +38,12 @@ impl UsageRecordId {
     }
 }
 
+impl fmt::Display for UsageRecordId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// One continuous stretch of use of a group within one budget day.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UsageRecord {
@@ -51,6 +58,10 @@ pub struct UsageRecord {
     /// Credited time so far.
     #[serde(rename = "duration_ms", with = "millis")]
     pub duration: Duration,
+    /// Whether any of it was counted while the agent had no connection to
+    /// the server, so other devices could not see it in time.
+    #[serde(default)]
+    pub offline: bool,
 }
 
 /// What happened in one tick, as needed for accounting.
@@ -62,16 +73,33 @@ pub struct Tick {
     pub day: BudgetDay,
     /// Time to credit, already capped with [`credit`].
     pub credited: Duration,
+    /// Whether the agent is connected to the server.
+    pub online: bool,
 }
 
 /// This device's usage records.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Journal {
-    records: Vec<UsageRecord>,
+    entries: Vec<Entry>,
     /// Records still being extended, by group. Not persisted: after a
     /// restart new stretches start, which costs nothing but a record.
     #[serde(skip)]
     open: BTreeMap<GroupId, UsageRecordId>,
+}
+
+/// A record and how much of it the server has confirmed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Entry {
+    #[serde(flatten)]
+    record: UsageRecord,
+    #[serde(default, rename = "acknowledged_ms", with = "millis")]
+    acknowledged: Duration,
+}
+
+impl Entry {
+    fn is_synced(&self) -> bool {
+        self.acknowledged >= self.record.duration
+    }
 }
 
 impl Journal {
@@ -93,17 +121,25 @@ impl Journal {
             let open = self
                 .open
                 .get(&group)
-                .and_then(|id| self.records.iter_mut().find(|r| r.id == *id));
+                .and_then(|id| self.entries.iter_mut().find(|entry| entry.record.id == *id));
             match open {
-                Some(record) if record.day == tick.day => record.duration += tick.credited,
+                Some(entry) if entry.record.day == tick.day => {
+                    entry.record.duration += tick.credited;
+                    entry.record.offline |= !tick.online;
+                }
                 _ => {
                     let id = new_id();
-                    self.records.push(UsageRecord {
+                    let record = UsageRecord {
                         id,
                         group,
                         day: tick.day,
                         start: tick.now.checked_sub(tick.credited).unwrap_or(tick.now),
                         duration: tick.credited,
+                        offline: !tick.online,
+                    };
+                    self.entries.push(Entry {
+                        record,
+                        acknowledged: Duration::ZERO,
                     });
                     self.open.insert(group, id);
                 }
@@ -114,17 +150,40 @@ impl Journal {
     /// This device's total use of `group` during `day`.
     #[must_use]
     pub fn usage(&self, group: GroupId, day: BudgetDay) -> Duration {
-        self.records
-            .iter()
+        self.records()
             .filter(|record| record.group == group && record.day == day)
             .map(|record| record.duration)
             .sum()
     }
 
     /// All records, oldest first.
-    #[must_use]
-    pub fn records(&self) -> &[UsageRecord] {
-        &self.records
+    pub fn records(&self) -> impl Iterator<Item = &UsageRecord> {
+        self.entries.iter().map(|entry| &entry.record)
+    }
+
+    /// Records the server has not confirmed in full, in their current state.
+    pub fn unsynced(&self) -> impl Iterator<Item = &UsageRecord> {
+        self.entries
+            .iter()
+            .filter(|entry| !entry.is_synced())
+            .map(|entry| &entry.record)
+    }
+
+    /// Notes that the server has stored record `id` with `duration`.
+    ///
+    /// Confirmations never shrink: an older, shorter confirmation arriving
+    /// late does not undo a newer one.
+    pub fn acknowledge(&mut self, id: UsageRecordId, duration: Duration) {
+        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.record.id == id) {
+            entry.acknowledged = entry.acknowledged.max(duration);
+        }
+    }
+
+    /// Drops fully confirmed records of days before `day`. They are kept by
+    /// the server and no longer affect any decision here.
+    pub fn prune_before(&mut self, day: BudgetDay) {
+        self.entries
+            .retain(|entry| entry.record.day >= day || !entry.is_synced());
     }
 }
 

@@ -16,6 +16,7 @@ pub mod enforcement;
 pub mod ids;
 pub mod policy;
 pub mod process;
+pub mod protocol;
 pub mod rules;
 pub mod schedule;
 pub mod units;

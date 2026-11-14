@@ -70,6 +70,12 @@ impl From<NonEmptyText> for String {
 pub struct ExecutableName(String);
 
 impl ExecutableName {
+    /// The file name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
     /// Whether the process runs an executable with this file name.
     ///
     /// Falls back to the first command-line argument when the executable
@@ -124,6 +130,12 @@ impl PathPattern {
         require_literal_leading_dot: false,
     };
 
+    /// The glob as written.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
     /// Whether the process executable matches the glob.
     #[must_use]
     pub fn matches(&self, process: &ProcessInfo) -> bool {
@@ -170,6 +182,12 @@ impl From<PathPattern> for String {
 pub struct CommandLinePattern(Regex);
 
 impl CommandLinePattern {
+    /// The expression as written.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
     /// Whether the expression matches anywhere in `command_line`.
     #[must_use]
     pub fn matches(&self, command_line: &str) -> bool {

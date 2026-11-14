@@ -251,3 +251,14 @@ fn sleep_during_grace_forces_termination_on_wake() {
     );
     assert_eq!(actions, vec![terminate(10, Termination::Forced)]);
 }
+
+#[test]
+fn permission_after_a_forced_termination_announces_nothing() {
+    let mut enforcer = Enforcer::default();
+    enforcer.step(&observe(Availability::Denied(QUOTA), &[20]), TICK);
+    let actions = enforcer.step(
+        &observe(allowed(minutes(15), StopReason::QuotaEnd), &[20]),
+        TICK,
+    );
+    assert_eq!(actions, NOTHING);
+}
