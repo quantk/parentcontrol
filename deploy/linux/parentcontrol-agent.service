@@ -1,0 +1,43 @@
+[Unit]
+Description=Parent Control agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/parentcontrol-agent run
+Restart=always
+RestartSec=5
+
+# Policy snapshot, usage journal and server link: /var/lib/parentcontrol,
+# root only. The tray socket: /run/parentcontrol.
+StateDirectory=parentcontrol
+StateDirectoryMode=0700
+RuntimeDirectory=parentcontrol
+RuntimeDirectoryMode=0755
+
+# The agent runs as root to see and end every user's processes; everything
+# else is taken away. CAP_SYS_PTRACE reads other users' /proc/<pid>/exe,
+# maps and fd; CAP_KILL signals their processes.
+CapabilityBoundingSet=CAP_KILL CAP_SYS_PTRACE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

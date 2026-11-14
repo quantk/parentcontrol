@@ -43,11 +43,30 @@ build-windows:
 deny:
     cargo deny --locked check
 
+linux_target := "x86_64-unknown-linux-musl"
+
+# Includes the systemd unit, the tray autostart and install.sh.
+# Static Linux binaries of the agent and the tray, in target/dist/linux.
+dist-linux:
+    cargo build --release --locked --target {{linux_target}} -p parentcontrol-agent -p parentcontrol-tray
+    mkdir -p target/dist/linux
+    cp target/{{linux_target}}/release/parentcontrol-agent target/{{linux_target}}/release/parentcontrol-tray target/dist/linux/
+    cp deploy/linux/* target/dist/linux/
+
 # Release binaries of the agent and the tray for Windows, in target/dist/windows.
 dist-windows:
     cargo build --release --locked --target {{windows_target}} -p parentcontrol-agent -p parentcontrol-tray
     mkdir -p target/dist/windows
     cp target/{{windows_target}}/release/parentcontrol-agent.exe target/{{windows_target}}/release/parentcontrol-tray.exe target/dist/windows/
+
+server_host := "quantick@192.168.1.135"
+
+# The data stays in its Docker volume; only the code is replaced.
+# Ship the committed tree to the home server and restart the container there.
+deploy:
+    git diff --quiet HEAD || { echo "Commit first: deploy ships the committed tree." >&2; exit 1; }
+    git archive --format=tar HEAD | ssh {{server_host}} 'rm -rf ~/parentcontrol.new && mkdir ~/parentcontrol.new && tar -x -C ~/parentcontrol.new && rm -rf ~/parentcontrol && mv ~/parentcontrol.new ~/parentcontrol'
+    ssh {{server_host}} 'cd ~/parentcontrol/deploy && docker compose up -d --build'
 
 # Use the repository's git hooks (run once per clone).
 install-hooks:

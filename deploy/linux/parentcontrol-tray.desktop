@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Родительский контроль
+Comment=Остаток времени и уведомления
+Exec=parentcontrol-tray
+Icon=appointment-soon
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-phase=2

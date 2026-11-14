@@ -10,28 +10,56 @@
   };
 
   outputs =
-    { nixpkgs, rust-overlay, ... }:
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
       systems = [ "x86_64-linux" ];
       forAllSystems =
         f:
         nixpkgs.lib.genAttrs systems (
           system:
-          f (
-            import nixpkgs {
+          let
+            pkgs = import nixpkgs {
               inherit system;
               overlays = [ rust-overlay.overlays.default ];
-            }
-          )
+            };
+            # Same toolchain, components and targets as rustup would install.
+            rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+          in
+          f { inherit pkgs rust; }
         );
     in
     {
+      packages = forAllSystems (
+        { pkgs, rust }:
+        {
+          default = pkgs.callPackage ./nix/package.nix {
+            rustPlatform = pkgs.makeRustPlatform {
+              cargo = rust;
+              rustc = rust;
+            };
+          };
+        }
+      );
+
+      nixosModules.default = import ./nix/module.nix { inherit self; };
+
+      # A VM test of the NixOS module; `nix flake check` runs it.
+      checks = forAllSystems (
+        { pkgs, ... }:
+        {
+          agent-vm = import ./nix/test.nix { inherit self pkgs; };
+        }
+      );
+
       devShells = forAllSystems (
-        pkgs:
+        { pkgs, rust }:
         let
-          # Same toolchain, components and targets as rustup would install.
-          rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           mingw = pkgs.pkgsCross.mingwW64;
+          musl = pkgs.pkgsCross.musl64;
         in
         {
           default = pkgs.mkShell {
@@ -49,6 +77,10 @@
             CC_x86_64_pc_windows_gnu = "${mingw.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
             AR_x86_64_pc_windows_gnu = "${mingw.stdenv.cc.bintools.bintools}/bin/x86_64-w64-mingw32-ar";
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS = "-L native=${mingw.windows.pthreads}/lib";
+            # Static Linux binaries: C parts of dependencies need a musl compiler.
+            CC_x86_64_unknown_linux_musl = "${musl.stdenv.cc}/bin/x86_64-unknown-linux-musl-gcc";
+            CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER = "${musl.stdenv.cc}/bin/x86_64-unknown-linux-musl-gcc";
+
             # rustc calls `x86_64-w64-mingw32-dlltool` by name for import
             # libraries; the unwrapped binutils carry no setup hooks.
             shellHook = ''
@@ -58,6 +90,6 @@
         }
       );
 
-      formatter = forAllSystems (pkgs: pkgs.nixfmt);
+      formatter = forAllSystems ({ pkgs, ... }: pkgs.nixfmt);
     };
 }
