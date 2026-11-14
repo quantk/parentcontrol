@@ -1,0 +1,6 @@
+# Synthesized from the launcher's argument template, not captured from a real run.
+C:\Games\notjava.exe
+-Xmx4096m
+-cp
+C:\Users\kid\AppData\Local\Programs\PrismLauncher\jars\NewLaunch.jar
+org.prismlauncher.EntryPoint

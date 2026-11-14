@@ -1,0 +1,8 @@
+# Synthesized from the launcher's argument template, not captured from a real run.
+/usr/lib/jvm/java-21-openjdk/bin/java
+-Xms512m
+-Xmx4096m
+-Duser.language=en
+-cp
+/usr/share/PrismLauncher/NewLaunch.jar
+org.prismlauncher.EntryPoint

@@ -1,0 +1,7 @@
+# Synthesized from the launcher's argument template, not captured from a real run.
+/usr/lib/jvm/java-21-openjdk/bin/java
+-Xmx512m
+-cp
+/home/kid/.gradle/wrapper/dists/gradle-8.5-bin/gradle-8.5/lib/gradle-launcher-8.5.jar
+org.gradle.launcher.daemon.bootstrap.GradleDaemon
+8.5

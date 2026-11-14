@@ -9,8 +9,38 @@ rust-version = "1.99"
 license = "MIT"
 publish = false
 
+# Every dependency is declared here once, with the reason it is needed, and
+# crates opt in with `.workspace = true`.
 [workspace.dependencies]
 parentcontrol-core = { path = "crates/core" }
+
+# Errors: typed in libraries, `anyhow` only at binary entry points.
+anyhow = "1.0.104"
+thiserror = "2.0.21"
+# Time zones and civil dates for budget days; bundled tzdb so static
+# binaries and minimal containers behave the same everywhere.
+jiff = { version = "0.2.43", features = ["serde", "tzdb-bundle-always"] }
+# Snapshot, journal and protocol serialization.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# Unique ids of usage records for idempotent merging.
+uuid = { version = "1.29.2", features = ["serde"] }
+# Custom rules: path globs and command-line regular expressions.
+glob = "0.3.4"
+regex = "1.13.1"
+# Async runtime for the agent's scan loop and server connection.
+tokio = { version = "1.54.1", features = ["rt", "macros", "time", "signal"] }
+# Structured logs (journald / service log via stderr).
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+# Command-line interface of the binaries.
+clap = { version = "4.6.7", features = ["derive"] }
+# Linux signals without hand-written FFI.
+rustix = { version = "1.1.6", features = ["process"] }
+
+# Test-only.
+proptest = "1.12.0"
+tempfile = "3.27.0"
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: `platform/` modules opt back in with

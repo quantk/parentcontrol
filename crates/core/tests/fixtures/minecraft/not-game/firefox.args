@@ -1,0 +1,6 @@
+# Synthesized from the launcher's argument template, not captured from a real run.
+/usr/lib/firefox/firefox
+-contentproc
+-childID
+3
+-isForBrowser

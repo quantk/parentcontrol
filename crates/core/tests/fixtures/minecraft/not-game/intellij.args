@@ -1,0 +1,5 @@
+# Synthesized from the launcher's argument template, not captured from a real run.
+/opt/idea/jbr/bin/java
+-classpath
+/opt/idea/lib/app.jar:/opt/idea/lib/util.jar
+com.intellij.idea.Main
