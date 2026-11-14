@@ -8,6 +8,10 @@ use std::{fs, io};
 
 use parentcontrol_core::process::OsUser;
 
+/// Uids of human accounts: from 1000 up, below the range systemd and
+/// distributions reserve for containers and dynamic users.
+const PEOPLE: std::ops::Range<u32> = 1000..60000;
+
 /// Account names by uid.
 #[derive(Debug, Default)]
 pub(super) struct Users(HashMap<u32, OsUser>);
@@ -21,6 +25,18 @@ impl Users {
     /// The account with `uid`, if known.
     pub(super) fn name(&self, uid: u32) -> Option<&OsUser> {
         self.0.get(&uid)
+    }
+
+    /// Accounts in the range distributions give to people, sorted by name.
+    pub(super) fn people(&self) -> Vec<OsUser> {
+        let mut people: Vec<OsUser> = self
+            .0
+            .iter()
+            .filter(|(uid, _)| PEOPLE.contains(*uid))
+            .map(|(_, user)| user.clone())
+            .collect();
+        people.sort();
+        people
     }
 
     fn parse(text: &str) -> Self {
@@ -48,6 +64,14 @@ mod tests {
         assert_eq!(users.name(0), Some(&OsUser::new("root")));
         assert_eq!(users.name(1001), Some(&OsUser::new("kid")));
         assert_eq!(users.name(1002), None);
+    }
+
+    #[test]
+    fn people_exclude_system_accounts() {
+        let users = Users::parse(
+            "root:x:0:0::/:/bin/sh\nnobody:x:65534:65534::/:/bin/false\nkid:x:1001:100::/:/bin/sh\nmom:x:1000:100::/:/bin/sh\n",
+        );
+        assert_eq!(users.people(), [OsUser::new("kid"), OsUser::new("mom")]);
     }
 
     #[test]

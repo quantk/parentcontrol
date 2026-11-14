@@ -10,10 +10,12 @@ use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use parentcontrol_core::enforcement::Termination;
-use parentcontrol_core::process::{ProcessId, ProcessInfo, ProcessInspector};
+use parentcontrol_core::process::{OsUser, ProcessId, ProcessInfo, ProcessInspector};
+use parentcontrol_core::protocol::DevicePlatform;
 use rustix::io::Errno;
 use rustix::process::{Pid, Signal};
 use tokio::signal::unix::{SignalKind, signal};
+use tracing::warn;
 
 use super::{Platform, PlatformError};
 
@@ -51,6 +53,21 @@ impl Platform for Native {
 impl ProcessInspector for Native {
     fn loaded_files(&self, id: ProcessId) -> Vec<PathBuf> {
         procfs::loaded_files(id)
+    }
+}
+
+/// This OS, as reported to the server.
+pub(crate) const PLATFORM: DevicePlatform = DevicePlatform::Linux;
+
+/// Accounts of people, as opposed to system services, that the parent may
+/// bind to the child's profile.
+pub(crate) fn local_users() -> Vec<OsUser> {
+    match passwd::Users::load() {
+        Ok(users) => users.people(),
+        Err(error) => {
+            warn!(%error, "cannot list local accounts");
+            Vec::new()
+        }
     }
 }
 

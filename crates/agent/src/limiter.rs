@@ -3,15 +3,18 @@
 use std::time::Duration;
 
 use parentcontrol_core::budget;
+use parentcontrol_core::calendar::BudgetDay;
 use parentcontrol_core::clock::Clock;
 use parentcontrol_core::enforcement::{Enforcer, Observation};
 use parentcontrol_core::ids::GroupId;
 use parentcontrol_core::policy::Policy;
+use parentcontrol_core::protocol::Acknowledgement;
 use parentcontrol_core::usage::{self, Journal, Tick, UsageRecordId};
 use tracing::warn;
 use uuid::Uuid;
 
 use crate::platform::Platform;
+use crate::sync::Report;
 use crate::{actions, scan};
 
 /// Applies a policy to the processes of this machine.
@@ -23,6 +26,8 @@ pub(crate) struct Limiter<P, C> {
     enforcer: Enforcer,
     /// The interval between steps; longer gaps are not credited as usage.
     interval: Duration,
+    /// Groups running at the last step.
+    active: Vec<GroupId>,
 }
 
 impl<P: Platform, C: Clock> Limiter<P, C> {
@@ -34,6 +39,7 @@ impl<P: Platform, C: Clock> Limiter<P, C> {
             journal,
             enforcer: Enforcer::default(),
             interval,
+            active: Vec::new(),
         }
     }
 
@@ -42,8 +48,34 @@ impl<P: Platform, C: Clock> Limiter<P, C> {
         &self.journal
     }
 
-    /// Runs one step, `elapsed` after the previous one.
-    pub(crate) fn step(&mut self, policy: &Policy, elapsed: Duration) {
+    /// What to tell the server: unconfirmed usage and what runs now.
+    pub(crate) fn report(&self) -> Report {
+        Report {
+            records: self.journal.unsynced().cloned().collect(),
+            active_groups: self.active.clone(),
+        }
+    }
+
+    /// Notes what the server has stored and forgets records it no longer
+    /// needs locally: confirmed ones from before yesterday.
+    pub(crate) fn acknowledge(&mut self, acknowledgements: &[Acknowledgement], today: BudgetDay) {
+        for acknowledgement in acknowledgements {
+            self.journal
+                .acknowledge(acknowledgement.id, acknowledgement.duration);
+        }
+        if let Ok(yesterday) = today.date().yesterday() {
+            self.journal.prune_before(BudgetDay::new(yesterday));
+        }
+    }
+
+    /// The clock the limiter decides by.
+    pub(crate) const fn clock(&self) -> &C {
+        &self.clock
+    }
+
+    /// Runs one step, `elapsed` after the previous one; `online` tells
+    /// whether the server is reachable, to mark usage counted without it.
+    pub(crate) fn step(&mut self, policy: &Policy, elapsed: Duration, online: bool) {
         let processes = match self.platform.processes() {
             Ok(processes) => processes,
             Err(error) => {
@@ -55,14 +87,15 @@ impl<P: Platform, C: Clock> Limiter<P, C> {
 
         let now = self.clock.now();
         let position = policy.calendar().locate(now);
-        let active: Vec<GroupId> = running.keys().copied().collect();
+        self.active = running.keys().copied().collect();
         let tick = Tick {
             now,
             day: position.day,
             credited: usage::credit(elapsed, self.interval),
+            online,
         };
         self.journal
-            .record(&active, tick, || UsageRecordId::new(Uuid::new_v4()));
+            .record(&self.active, tick, || UsageRecordId::new(Uuid::new_v4()));
 
         let day_start = policy.calendar().day_start();
         let observations: Vec<Observation> = policy

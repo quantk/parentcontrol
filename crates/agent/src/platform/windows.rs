@@ -8,7 +8,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use parentcontrol_core::enforcement::Termination;
-use parentcontrol_core::process::{ProcessId, ProcessInfo, ProcessInspector};
+use parentcontrol_core::process::{OsUser, ProcessId, ProcessInfo, ProcessInspector};
+use parentcontrol_core::protocol::DevicePlatform;
 
 use super::{Platform, PlatformError};
 
@@ -30,6 +31,14 @@ impl ProcessInspector for Native {
     fn loaded_files(&self, _: ProcessId) -> Vec<PathBuf> {
         Vec::new()
     }
+}
+
+/// This OS, as reported to the server.
+pub(crate) const PLATFORM: DevicePlatform = DevicePlatform::Windows;
+
+/// Accounts of people the parent may bind to the child's profile.
+pub(crate) fn local_users() -> Vec<OsUser> {
+    Vec::new()
 }
 
 /// Where the agent keeps its state.

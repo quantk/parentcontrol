@@ -10,6 +10,7 @@ fn journal_with_usage() -> Journal {
         now: "2026-11-14T14:00:00Z".parse().unwrap(),
         day: BudgetDay::new(jiff::civil::date(2026, 11, 14)),
         credited: std::time::Duration::from_secs(5),
+        online: true,
     };
     journal.record(&[GroupId::new(1)], tick, || {
         UsageRecordId::new(uuid::Uuid::from_u128(1))
@@ -30,7 +31,13 @@ fn journal_round_trips() {
     let store = Store::open(dir.path().to_owned()).unwrap();
     let journal = journal_with_usage();
     store.save_journal(&journal).unwrap();
-    assert_eq!(store.load_journal().unwrap().records(), journal.records());
+    assert!(
+        store
+            .load_journal()
+            .unwrap()
+            .records()
+            .eq(journal.records())
+    );
 }
 
 #[test]

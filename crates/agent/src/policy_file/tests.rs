@@ -70,3 +70,15 @@ fn deleted_file_lifts_the_policy() {
     fs::remove_file(&path).unwrap();
     assert_eq!(file.refresh(), None);
 }
+
+#[test]
+fn replaced_policy_is_in_force_and_persisted() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("policy.json");
+    let mut file = PolicyFile::new(path.clone());
+    file.replace(policy(45)).unwrap();
+    assert_eq!(file.refresh(), Some(&policy(45)));
+
+    let mut reopened = PolicyFile::new(path);
+    assert_eq!(reopened.refresh(), Some(&policy(45)));
+}

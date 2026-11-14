@@ -15,13 +15,17 @@ use thiserror::Error;
 #[allow(unsafe_code, reason = "OS FFI; each block has a SAFETY comment")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{Native, create_private_dir, default_data_dir, shutdown_signal};
+pub(crate) use linux::{
+    Native, PLATFORM, create_private_dir, default_data_dir, local_users, shutdown_signal,
+};
 
 #[cfg(windows)]
 #[allow(unsafe_code, reason = "OS FFI; each block has a SAFETY comment")]
 mod windows;
 #[cfg(windows)]
-pub(crate) use windows::{Native, create_private_dir, default_data_dir, shutdown_signal};
+pub(crate) use windows::{
+    Native, PLATFORM, create_private_dir, default_data_dir, local_users, shutdown_signal,
+};
 
 /// A failed OS operation.
 #[derive(Debug, Error)]

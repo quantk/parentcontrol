@@ -10,7 +10,7 @@ const INSIDE_WINDOW: &str = "2026-11-14T14:00:00Z";
 
 fn run_steps(limiter: &mut Limiter<&FakePlatform, &FakeClock>, policy: &Policy, steps: usize) {
     for _ in 0..steps {
-        limiter.step(policy, STEP);
+        limiter.step(policy, STEP, true);
     }
 }
 
@@ -68,7 +68,7 @@ fn processes_of_other_accounts_are_left_alone() {
     let mut limiter = Limiter::new(&platform, &clock, Journal::default(), STEP);
     run_steps(&mut limiter, &policy, 3);
     assert_eq!(*platform.terminated.borrow(), []);
-    assert_eq!(limiter.journal().records().len(), 0);
+    assert_eq!(limiter.journal().records().count(), 0);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn long_gap_between_steps_is_not_credited() {
     );
     platform.processes.borrow_mut().push(minecraft(100, "kid"));
     let mut limiter = Limiter::new(&platform, &clock, Journal::default(), STEP);
-    limiter.step(&policy, Duration::from_hours(2));
+    limiter.step(&policy, Duration::from_hours(2), true);
     let day = policy.calendar().locate(clock.now()).day;
     assert_eq!(limiter.journal().usage(GroupId::new(1), day), STEP * 2);
 }

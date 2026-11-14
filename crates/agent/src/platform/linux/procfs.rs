@@ -22,7 +22,7 @@ pub(super) fn processes(users: &Users) -> io::Result<Vec<ProcessInfo>> {
 /// Whether `process` still runs, as opposed to having exited or its PID
 /// having been reused.
 pub(super) fn is_running(process: ProcessId) -> bool {
-    start_time(process.pid()) == Some(process.started())
+    Stat::read(process.pid()).is_some_and(|stat| !stat.exited && stat.started == process.started())
 }
 
 /// Files `process` has mapped into memory or open.
@@ -48,7 +48,11 @@ pub(super) fn loaded_files(process: ProcessId) -> Vec<PathBuf> {
 
 fn read(pid: u32, users: &Users) -> Option<ProcessInfo> {
     let dir = process_dir(pid);
-    let started = start_time(pid)?;
+    let stat = Stat::read(pid)?;
+    if stat.exited {
+        return None;
+    }
+    let started = stat.started;
     let uid = fs::metadata(&dir).ok()?.uid();
     let command_line = fs::read(dir.join("cmdline"))
         .map(|raw| split_command_line(&raw))
@@ -65,17 +69,32 @@ fn process_dir(pid: u32) -> PathBuf {
     Path::new("/proc").join(pid.to_string())
 }
 
-/// Start time in clock ticks since boot: field 22 of `/proc/<pid>/stat`.
-fn start_time(pid: u32) -> Option<u64> {
-    let stat = fs::read_to_string(process_dir(pid).join("stat")).ok()?;
-    parse_start_time(&stat)
+/// The fields of `/proc/<pid>/stat` the agent needs.
+#[derive(Debug, PartialEq, Eq)]
+struct Stat {
+    /// Start time in clock ticks since boot (field 22).
+    started: u64,
+    /// Whether the process is a zombie or dead (field 3 is `Z` or `X`):
+    /// it has exited and only waits for its parent to collect it.
+    exited: bool,
 }
 
-fn parse_start_time(stat: &str) -> Option<u64> {
-    // The command name (field 2) is in parentheses and may contain spaces
-    // or parentheses itself, so count fields from the last `)`.
-    let after_name = &stat[stat.rfind(')')? + 1..];
-    after_name.split_whitespace().nth(19)?.parse().ok()
+impl Stat {
+    fn read(pid: u32) -> Option<Self> {
+        Self::parse(&fs::read_to_string(process_dir(pid).join("stat")).ok()?)
+    }
+
+    fn parse(stat: &str) -> Option<Self> {
+        // The command name (field 2) is in parentheses and may contain
+        // spaces or parentheses itself, so count fields from the last `)`.
+        let mut fields = stat[stat.rfind(')')? + 1..].split_whitespace();
+        let state = fields.next()?;
+        let started = fields.nth(18)?.parse().ok()?;
+        Some(Self {
+            started,
+            exited: matches!(state, "Z" | "X"),
+        })
+    }
 }
 
 /// Splits `/proc/<pid>/cmdline`: arguments, each terminated by a NUL.
@@ -100,10 +119,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn start_time_survives_odd_command_names() {
+    fn stat_survives_odd_command_names() {
         let stat =
             "4242 (java) x) S 1 4242 4242 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 30 0 987654 0 0";
-        assert_eq!(parse_start_time(stat), Some(987_654));
+        let expected = Stat {
+            started: 987_654,
+            exited: false,
+        };
+        assert_eq!(Stat::parse(stat), Some(expected));
+    }
+
+    #[test]
+    fn zombies_count_as_exited() {
+        let stat = "4242 (java) Z 1 4242 4242 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 30 0 9 0 0";
+        assert_eq!(Stat::parse(stat).map(|stat| stat.exited), Some(true));
     }
 
     #[test]

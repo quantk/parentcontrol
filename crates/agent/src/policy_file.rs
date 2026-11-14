@@ -8,6 +8,8 @@ use std::time::SystemTime;
 use parentcontrol_core::policy::Policy;
 use tracing::{error, info, warn};
 
+use crate::store::{StoreError, write_json};
+
 /// The last valid policy read from a file.
 #[derive(Debug)]
 pub(crate) struct PolicyFile {
@@ -47,6 +49,16 @@ impl PolicyFile {
             self.reload(modified.is_some());
         }
         self.policy.as_ref()
+    }
+
+    /// Stores `policy` as the new snapshot and puts it in force.
+    pub(crate) fn replace(&mut self, policy: Policy) -> Result<(), StoreError> {
+        write_json(&self.path, &policy)?;
+        self.seen = fs::metadata(&self.path)
+            .and_then(|meta| meta.modified())
+            .ok();
+        self.policy = Some(policy);
+        Ok(())
     }
 
     fn reload(&mut self, exists: bool) {
