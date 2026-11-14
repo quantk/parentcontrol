@@ -663,6 +663,124 @@ details.disclosure[open] > summary { margin-bottom: 12px; }
 }
 .input-group .button { border-radius: 0 var(--radius-small) var(--radius-small) 0; margin-left: -1px; }
 
+/* ---------- Schedule ---------- */
+
+html:not(.js) .js-only { display: none !important; }
+
+.schedule-days { display: grid; }
+
+/* Columns: day, time per day, when, strip, copy. */
+.schedule-header, .schedule-day {
+  display: grid;
+  grid-template-columns: 120px 130px minmax(250px, 1fr) minmax(160px, 1.1fr) 36px;
+  align-items: start;
+  gap: 8px 16px;
+}
+
+.schedule-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+
+.schedule-header .ticks { grid-column: 4; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+
+.schedule-day {
+  margin: 0;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.schedule-day:last-child { border-bottom: 0; }
+
+/* A legend cannot be a grid item, so it floats into the first column. */
+.schedule-day > legend.day-name {
+  float: left;
+  padding: 0;
+  margin: 0;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.day-quota { grid-column: 2; }
+.day-mode { grid-column: 3; display: grid; gap: 8px; justify-items: start; }
+.day-strip { grid-column: 4; }
+.day-copy { grid-column: 5; }
+
+.choice { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius-small); overflow: hidden; }
+.choice label { position: relative; }
+.choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.choice span { display: block; padding: 5px 12px; font-size: 0.875rem; color: var(--ink-2); }
+.choice label + label span { border-left: 1px solid var(--line-strong); }
+.choice input:checked + span { background: var(--accent-wash); color: var(--accent-ink); font-weight: 550; }
+.choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.day-windows { display: grid; gap: 6px; justify-items: start; }
+.schedule-day:has(input[value="all"]:checked) .day-windows { display: none; }
+.window-row { display: flex; align-items: center; gap: 6px; }
+.window-row input { min-height: 32px; padding: 4px 8px; font-variant-numeric: tabular-nums; }
+
+/* The allowed part of the budget day, from one day start to the next. */
+.day-strip {
+  position: relative;
+  height: 12px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  background-image: linear-gradient(90deg, transparent calc(25% - 1px), var(--line) calc(25% - 1px), var(--line) 25%, transparent 25%, transparent calc(50% - 1px), var(--line) calc(50% - 1px), var(--line) 50%, transparent 50%, transparent calc(75% - 1px), var(--line) calc(75% - 1px), var(--line) 75%, transparent 75%);
+  overflow: hidden;
+}
+
+.day-strip > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--from);
+  width: var(--length);
+  min-width: 3px;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+
+.schedule-actions { margin-top: 16px; }
+
+/* A small drop-down of actions. */
+details.menu { position: relative; }
+details.menu > summary { list-style: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+.menu-items {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  display: grid;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+.menu-items button { justify-content: flex-start; border: 0; background: transparent; min-height: 34px; }
+.menu-items button:hover { background: var(--surface-sunk); }
+
+@media (max-width: 860px) {
+  .schedule-header { display: none; }
+  .schedule-day {
+    grid-template-columns: 1fr auto;
+    gap: 10px 12px;
+  }
+  .schedule-day > legend.day-name { float: none; line-height: 1.4; }
+  .day-quota { grid-column: 1; grid-row: 1; }
+  .day-copy { grid-column: 2; grid-row: 1; }
+  .day-mode { grid-column: 1 / -1; }
+  .day-strip { grid-column: 1 / -1; margin-top: 0; }
+}
+
 /* ---------- Tooltips ---------- */
 
 .tooltip {

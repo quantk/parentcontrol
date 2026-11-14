@@ -1,35 +1,99 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>Расписание</h1>
-<p class="muted">
-  Квота — сколько минут в день можно играть. Окна — когда можно играть, через запятую,
-  например <code>16:00-20:00, 21:00-22:00</code>; пусто — весь день. Сутки начинаются в {{ day_start }},
-  поэтому окно может переходить через полночь, но не через {{ day_start }}.
-</p>
+<div class="page-head">
+  <div>
+    <h1>Расписание</h1>
+    <p>Сколько времени в день можно играть и в какие часы. Сутки начинаются в {{ day_start }}: тогда время на день обновляется.</p>
+  </div>
+</div>
 
 {% if groups.is_empty() %}
-<div class="card"><p>Сначала <a href="/groups">создайте группу</a>.</p></div>
+<section class="card empty">
+  {{ Icon("calendar") }}
+  <p>Сначала <a href="/groups">создайте группу</a> программ.</p>
+</section>
 {% endif %}
 
+{# A row for one more window; panel.js fills in the field names. #}
+<template id="window-row">
+  <div class="window-row">
+    <input type="time" aria-label="Начало окна">
+    <span class="muted">—</span>
+    <input type="time" aria-label="Конец окна">
+    <button type="button" class="button small ghost icon-only" data-remove-window aria-label="Убрать окно">{{ Icon("close") }}</button>
+  </div>
+</template>
+
 {% for group in groups %}
-<section class="card">
-  <h2>{{ group.name }}</h2>
-  <form method="post" action="/groups/{{ group.id }}/schedule">
-    <div class="scroll">
-      <table>
-        <tr><th>День</th><th>Квота, мин</th><th>Окна</th></tr>
-        {% for day in group.days %}
-        <tr>
-          <td>{{ day.label }}</td>
-          <td><input type="number" name="quota_{{ day.key }}" value="{{ day.quota }}" min="0" max="1440" required style="width: 6em"></td>
-          <td><input name="windows_{{ day.key }}" value="{{ day.windows }}" placeholder="весь день" style="width: 100%"></td>
-        </tr>
-        {% endfor %}
-      </table>
+<section class="card" id="schedule-{{ group.id }}"
+         hx-target="this" hx-select="#schedule-{{ group.id }}" hx-swap="outerHTML" hx-select-oob="#flash" hx-push-url="false">
+  <form method="post" action="/groups/{{ group.id }}/schedule" class="schedule" data-day-start="{{ day_start }}">
+    <div class="card-head">
+      <h2>{{ group.name }}</h2>
     </div>
-    <div class="actions"><button type="submit" class="primary">Сохранить</button></div>
+
+    <div class="schedule-days">
+      <div class="schedule-header" aria-hidden="true">
+        <span>День</span>
+        <span>Время на день</span>
+        <span>Когда можно</span>
+        <span class="ticks">{% for tick in ticks %}<span>{{ tick }}</span>{% endfor %}</span>
+      </div>
+
+      {% for day in group.days %}
+      <fieldset class="schedule-day" data-day="{{ day.field.key }}">
+        <legend class="day-name">{{ day.field.label() }}</legend>
+
+        <label class="day-quota">
+          <span class="visually-hidden">Время на {{ day.field.label() }}, минут</span>
+          <span class="input-group">
+            <input type="number" name="quota_{{ day.field.key }}" value="{{ day.field.quota }}" min="0" max="1440" step="5" required inputmode="numeric">
+            <span class="suffix">мин</span>
+          </span>
+        </label>
+
+        <div class="day-mode">
+          <div class="choice" role="radiogroup" aria-label="Когда можно: {{ day.field.label() }}">
+            <label><input type="radio" name="mode_{{ day.field.key }}" value="all"{% if day.field.all_day %} checked{% endif %}><span>Весь день</span></label>
+            <label><input type="radio" name="mode_{{ day.field.key }}" value="windows"{% if !day.field.all_day %} checked{% endif %}><span>По часам</span></label>
+          </div>
+          <div class="day-windows">
+            {% for window in day.field.windows %}
+            <div class="window-row">
+              <input type="time" name="start_{{ day.field.key }}" value="{{ window.start }}" aria-label="Начало окна">
+              <span class="muted">—</span>
+              <input type="time" name="end_{{ day.field.key }}" value="{{ window.end }}" aria-label="Конец окна">
+              <button type="button" class="button small ghost icon-only js-only" data-remove-window aria-label="Убрать окно">{{ Icon("close") }}</button>
+            </div>
+            {% endfor %}
+            <button type="button" class="button small ghost js-only" data-add-window>{{ Icon("plus") }}<span>Ещё окно</span></button>
+          </div>
+        </div>
+
+        <div class="day-strip" aria-hidden="true">
+          {% for segment in day.preview %}<span style="--from: {{ segment.from }}; --length: {{ segment.length }}"></span>{% endfor %}
+        </div>
+
+        <details class="menu day-copy js-only">
+          <summary class="button small ghost icon-only" aria-label="Скопировать {{ day.field.label() }} на другие дни">{{ Icon("copy") }}</summary>
+          <div class="menu-items">
+            <button type="button" data-copy-to="weekdays">На будни</button>
+            <button type="button" data-copy-to="weekend">На выходные</button>
+            <button type="button" data-copy-to="all">На все дни</button>
+          </div>
+        </details>
+      </fieldset>
+      {% endfor %}
+    </div>
+
+    <div class="actions schedule-actions">
+      <button type="submit" class="button primary">Сохранить</button>
+      <span class="muted small" data-unsaved hidden>Есть несохранённые изменения</span>
+    </div>
   </form>
 </section>
 {% endfor %}
+
+<p class="note">{{ Icon("clock") }}<span>Окно может переходить через полночь, например 21:00—01:00, но не через начало суток в {{ day_start }}. 0 минут — в этот день играть нельзя.</span></p>
 {% endblock %}

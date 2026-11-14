@@ -1,18 +1,17 @@
-//! Quota and windows per day of week.
+//! Time allowed per day of week and the windows when it may be used, edited
+//! one group at a time.
 
-use std::collections::HashMap;
+mod form;
 
 use askama::Template;
 use axum::Form;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use jiff::civil::Weekday;
 use parentcontrol_core::calendar::TimeOfDay;
 use parentcontrol_core::ids::GroupId;
-use parentcontrol_core::schedule::{DaySchedule, MAX_DAILY_QUOTA, TimeWindow, WeekSchedule};
-use parentcontrol_core::units::Minutes;
 
-use super::{Flash, Icon, Layout, back, done, format, rejected, render};
+use self::form::{DayField, Segment};
+use super::{Flash, Icon, Layout, back, done, render};
 use crate::auth::Parent;
 use crate::db::{DEFAULT_PROFILE, groups, settings};
 use crate::error::AppError;
@@ -20,27 +19,19 @@ use crate::state::AppState;
 
 const PAGE: &str = "/schedule";
 
-const WEEK: [(Weekday, &str); 7] = [
-    (Weekday::Monday, "monday"),
-    (Weekday::Tuesday, "tuesday"),
-    (Weekday::Wednesday, "wednesday"),
-    (Weekday::Thursday, "thursday"),
-    (Weekday::Friday, "friday"),
-    (Weekday::Saturday, "saturday"),
-    (Weekday::Sunday, "sunday"),
-];
+/// Hours between the labels under the preview strips.
+const TICK_HOURS: u16 = 6;
 
-struct DayRow {
-    key: &'static str,
-    label: &'static str,
-    quota: u32,
-    windows: String,
+/// One day as the template shows it.
+struct DayView {
+    field: DayField,
+    preview: Vec<Segment>,
 }
 
-struct GroupSchedule {
+struct GroupView {
     id: GroupId,
     name: String,
-    days: Vec<DayRow>,
+    days: Vec<DayView>,
 }
 
 #[derive(Template)]
@@ -48,13 +39,24 @@ struct GroupSchedule {
 struct SchedulePage {
     layout: Layout,
     day_start: TimeOfDay,
-    groups: Vec<GroupSchedule>,
+    /// Clock times under the preview strips, from one day start to the next.
+    ticks: Vec<TimeOfDay>,
+    groups: Vec<GroupView>,
 }
 
 pub(super) async fn page(
     State(state): State<AppState>,
     _: Parent,
     flash: Option<Flash>,
+) -> Result<Response, AppError> {
+    show(&state, flash, None).await
+}
+
+/// Renders the page; `edited` replaces the stored week of one group.
+async fn show(
+    state: &AppState,
+    flash: Option<Flash>,
+    edited: Option<(GroupId, Vec<DayField>)>,
 ) -> Result<Response, AppError> {
     let (calendar, stored) = state
         .db
@@ -65,23 +67,25 @@ pub(super) async fn page(
             ))
         })
         .await?;
+    let day_start = calendar.day_start();
     let groups = stored
         .into_iter()
-        .map(|group| GroupSchedule {
-            id: group.id,
-            name: group.name,
-            days: WEEK
-                .iter()
-                .map(|&(weekday, key)| {
-                    let day = group.schedule.day(weekday);
-                    DayRow {
-                        key,
-                        label: format::weekday(weekday),
-                        quota: day.quota().get(),
-                        windows: windows_text(day),
-                    }
-                })
-                .collect(),
+        .map(|group| {
+            let fields = match &edited {
+                Some((id, days)) if *id == group.id => days.clone(),
+                _ => form::stored_week(&group.schedule),
+            };
+            GroupView {
+                id: group.id,
+                name: group.name,
+                days: fields
+                    .into_iter()
+                    .map(|field| DayView {
+                        preview: field.preview(day_start),
+                        field,
+                    })
+                    .collect(),
+            }
         })
         .collect();
     let page = SchedulePage {
@@ -90,101 +94,31 @@ pub(super) async fn page(
             active: PAGE,
             flash,
         },
-        day_start: calendar.day_start(),
+        day_start,
+        ticks: (0..=24 / TICK_HOURS)
+            .map(|tick| day_start.plus_minutes(tick * TICK_HOURS * 60))
+            .collect(),
         groups,
     };
     Ok(render(&page)?.into_response())
-}
-
-fn windows_text(day: &DaySchedule) -> String {
-    day.windows()
-        .iter()
-        .map(|window| format!("{}-{}", window.start(), window.end()))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// Parses `16:00-20:00, 21:00-22:00`; empty means no window restriction.
-fn parse_windows(text: &str) -> Result<Vec<TimeWindow>, String> {
-    text.split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let invalid = || format!("Окно «{part}» не распознано, нужно ЧЧ:ММ-ЧЧ:ММ.");
-            let (start, end) = part.split_once('-').ok_or_else(invalid)?;
-            let start = start.trim().parse().map_err(|_| invalid())?;
-            let end = end.trim().parse().map_err(|_| invalid())?;
-            TimeWindow::new(start, end).map_err(|_| format!("Окно «{part}» пустое."))
-        })
-        .collect()
-}
-
-/// Builds a week from the form, checking windows against `day_start`.
-fn parse_week(
-    form: &HashMap<String, String>,
-    day_start: TimeOfDay,
-) -> Result<WeekSchedule, String> {
-    let mut days = Vec::with_capacity(WEEK.len());
-    for (weekday, key) in WEEK {
-        let label = format::weekday(weekday);
-        let field = |prefix: &str| {
-            form.get(&format!("{prefix}_{key}"))
-                .map_or("", String::as_str)
-        };
-        let quota: u32 = field("quota")
-            .trim()
-            .parse()
-            .map_err(|_| format!("{label}: квота должна быть числом минут."))?;
-        let windows =
-            parse_windows(field("windows")).map_err(|error| format!("{label}: {error}"))?;
-        if let Some(window) = windows
-            .iter()
-            .find(|window| window.span(day_start).is_none())
-        {
-            return Err(format!(
-                "{label}: окно {}-{} пересекает начало суток {day_start}.",
-                window.start(),
-                window.end()
-            ));
-        }
-        let day = DaySchedule::new(Minutes::new(quota), windows)
-            .map_err(|_| format!("{label}: квота больше {} минут.", MAX_DAILY_QUOTA.get()))?;
-        days.push(day);
-    }
-    let [
-        monday,
-        tuesday,
-        wednesday,
-        thursday,
-        friday,
-        saturday,
-        sunday,
-    ] = <[DaySchedule; 7]>::try_from(days).map_err(|_| "Неполное расписание.".to_owned())?;
-    Ok(WeekSchedule {
-        monday,
-        tuesday,
-        wednesday,
-        thursday,
-        friday,
-        saturday,
-        sunday,
-    })
 }
 
 pub(super) async fn save(
     State(state): State<AppState>,
     _: Parent,
     Path(group): Path<GroupId>,
-    Form(form): Form<HashMap<String, String>>,
+    Form(fields): Form<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
     let day_start = state
         .db
         .call(|c| settings::required_calendar(c))
         .await?
         .day_start();
-    let schedule = match parse_week(&form, day_start) {
+    let days = form::submitted_week(&fields);
+    let schedule = match form::parse_week(&days, day_start) {
         Ok(schedule) => schedule,
-        Err(error) => return Ok(rejected(PAGE, &error)),
+        // Shown at once with the edits kept, rather than redirected.
+        Err(error) => return show(&state, Some(Flash::error(error)), Some((group, days))).await,
     };
     let name = state
         .db
@@ -195,58 +129,7 @@ pub(super) async fn save(
         })
         .await?;
     if let Some(name) = name {
-        return done(&state, PAGE, format!("Изменено расписание: {name}")).await;
+        return done(&state, PAGE, format!("Сохранено расписание: {name}")).await;
     }
     Ok(back(PAGE))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn form(windows: &str) -> HashMap<String, String> {
-        WEEK.iter()
-            .flat_map(|(_, key)| {
-                [
-                    (format!("quota_{key}"), "60".to_owned()),
-                    (format!("windows_{key}"), windows.to_owned()),
-                ]
-            })
-            .collect()
-    }
-
-    fn four() -> TimeOfDay {
-        "04:00".parse().unwrap()
-    }
-
-    #[test]
-    fn parses_a_full_week() {
-        let week = parse_week(&form("16:00-20:00, 21:00 - 22:30"), four()).unwrap();
-        assert_eq!(week.friday.quota(), Minutes::new(60));
-        assert_eq!(windows_text(&week.friday), "16:00-20:00, 21:00-22:30");
-    }
-
-    #[test]
-    fn empty_windows_mean_no_restriction() {
-        let week = parse_week(&form("  "), four()).unwrap();
-        assert_eq!(week.monday.windows(), []);
-    }
-
-    #[test]
-    fn rejects_windows_crossing_day_start() {
-        let error = parse_week(&form("03:00-05:00"), four()).unwrap_err();
-        assert!(error.contains("пересекает"), "{error}");
-    }
-
-    #[test]
-    fn rejects_garbage() {
-        assert!(parse_week(&form("вечером"), four()).is_err());
-        let mut bad_quota = form("");
-        bad_quota.insert("quota_sunday".to_owned(), "много".to_owned());
-        assert!(
-            parse_week(&bad_quota, four())
-                .unwrap_err()
-                .starts_with("Воскресенье")
-        );
-    }
 }
