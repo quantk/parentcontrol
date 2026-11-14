@@ -56,6 +56,10 @@ argon2 = "0.6.0"
 rpassword = "7"
 # Panel templates compiled into the binary; no frontend build step.
 askama = "0.16.1"
+# Windows: the service control manager, and the raw API for processes,
+# accounts, ACLs and the registry.
+windows-service = "0.8.1"
+windows-sys = "0.61.2"
 # Linux signals without hand-written FFI.
 rustix = { version = "1.1.6", features = ["process"] }
 

@@ -17,7 +17,7 @@ use rustix::process::{Pid, Signal};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::warn;
 
-use super::{Platform, PlatformError};
+use super::{Platform, PlatformError, ServiceBody};
 
 /// The Linux platform.
 #[derive(Debug, Default)]
@@ -86,6 +86,33 @@ pub(crate) fn create_private_dir(dir: &Path) -> Result<(), PlatformError> {
         .map_err(PlatformError::io(action()))?;
     // An existing directory keeps its mode on creation; tighten it.
     fs::set_permissions(dir, Permissions::from_mode(0o700)).map_err(PlatformError::io(action()))
+}
+
+/// Runs `body`; systemd needs no special protocol for a simple service.
+pub(crate) fn run_service(body: ServiceBody) -> Result<(), PlatformError> {
+    body().map_err(|error| PlatformError::Io {
+        action: "running the agent".to_owned(),
+        source: io::Error::other(error.to_string()),
+    })
+}
+
+/// Installation on Linux uses the systemd unit or the NixOS module.
+pub(crate) fn install() -> Result<(), PlatformError> {
+    Err(unsupported(
+        "installing (use the systemd unit or the NixOS module)",
+    ))
+}
+
+/// Removal on Linux uses the package manager or systemd.
+pub(crate) fn uninstall() -> Result<(), PlatformError> {
+    Err(unsupported("uninstalling (disable the systemd unit)"))
+}
+
+fn unsupported(action: &str) -> PlatformError {
+    PlatformError::Io {
+        action: action.to_owned(),
+        source: io::ErrorKind::Unsupported.into(),
+    }
 }
 
 /// Resolves when the service manager or an operator asks the agent to stop.

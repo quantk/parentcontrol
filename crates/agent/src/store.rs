@@ -60,6 +60,11 @@ impl Store {
         Ok(Self { dir })
     }
 
+    /// Path of another file in the data directory.
+    pub(crate) fn file(&self, name: &str) -> PathBuf {
+        self.dir.join(name)
+    }
+
     /// Path of the policy snapshot.
     pub(crate) fn policy_path(&self) -> PathBuf {
         self.dir.join(POLICY_FILE)

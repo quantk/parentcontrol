@@ -43,6 +43,12 @@ build-windows:
 deny:
     cargo deny --locked check
 
+# Release binaries of the agent and the tray for Windows, in target/dist/windows.
+dist-windows:
+    cargo build --release --locked --target {{windows_target}} -p parentcontrol-agent -p parentcontrol-tray
+    mkdir -p target/dist/windows
+    cp target/{{windows_target}}/release/parentcontrol-agent.exe target/{{windows_target}}/release/parentcontrol-tray.exe target/dist/windows/
+
 # Use the repository's git hooks (run once per clone).
 install-hooks:
     git config core.hooksPath .githooks

@@ -16,7 +16,8 @@ use thiserror::Error;
 mod linux;
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{
-    Native, PLATFORM, create_private_dir, default_data_dir, local_users, shutdown_signal,
+    Native, PLATFORM, create_private_dir, default_data_dir, install, local_users, run_service,
+    shutdown_signal, uninstall,
 };
 
 #[cfg(windows)]
@@ -24,7 +25,8 @@ pub(crate) use linux::{
 mod windows;
 #[cfg(windows)]
 pub(crate) use windows::{
-    Native, PLATFORM, create_private_dir, default_data_dir, local_users, shutdown_signal,
+    Native, PLATFORM, create_private_dir, default_data_dir, install, local_users, run_service,
+    shutdown_signal, uninstall,
 };
 
 /// A failed OS operation.
@@ -41,25 +43,15 @@ pub(crate) enum PlatformError {
 }
 
 impl PlatformError {
-    /// An operation this OS does not support yet.
-    #[cfg_attr(
-        not(windows),
-        expect(dead_code, reason = "only Windows lacks operations")
-    )]
-    pub(crate) fn unsupported(action: &str) -> Self {
-        Self::Io {
-            action: action.to_owned(),
-            source: io::ErrorKind::Unsupported.into(),
-        }
-    }
-
     /// Wraps an I/O error with a description of the failed action.
-    #[cfg_attr(windows, expect(dead_code, reason = "Windows has no I/O calls yet"))]
     pub(crate) fn io(action: impl Into<String>) -> impl FnOnce(io::Error) -> Self {
         let action = action.into();
         move |source| Self::Io { action, source }
     }
 }
+
+/// The agent's work when run as a system service.
+pub(crate) type ServiceBody = Box<dyn FnOnce() -> Result<(), Box<dyn std::error::Error>> + Send>;
 
 /// Process operations the agent needs from the OS.
 pub(crate) trait Platform: ProcessInspector {

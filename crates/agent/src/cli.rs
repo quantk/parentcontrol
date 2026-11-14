@@ -17,8 +17,16 @@ pub(crate) struct Cli {
 /// What to do.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Run the service loop; normally started by the service manager.
+    /// Run the service loop in the foreground; systemd starts the agent so.
     Run(DataDir),
+    /// Run as a Windows service; the service control manager starts the
+    /// agent so after `install`.
+    #[command(hide = true)]
+    Service,
+    /// Install or upgrade the Windows service and the tray autostart.
+    Install,
+    /// Remove the Windows service and the tray autostart; data stays.
+    Uninstall,
     /// Join the server with a code from the parent's panel.
     Enroll {
         /// The server, such as `https://192.168.1.135:8443`.
