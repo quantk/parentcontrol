@@ -1,0 +1,6 @@
+# Read by rustup and by the Nix dev shell alike, so both pin the same toolchain.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-unknown-linux-musl", "x86_64-pc-windows-gnu"]
+profile = "minimal"

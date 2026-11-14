@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Installed with `just install-hooks`. Runs the full check suite before every
+# commit; outside the Nix dev shell the tools must be on PATH.
+set -euo pipefail
+exec just check
