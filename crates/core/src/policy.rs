@@ -15,7 +15,7 @@ use crate::ids::GroupId;
 use crate::process::OsUser;
 use crate::rules::Rule;
 use crate::schedule::{DaySchedule, TimeWindow, WeekSchedule};
-use crate::units::Minutes;
+use crate::units::{MinuteDelta, Minutes};
 
 /// A policy that cannot be constructed.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -35,13 +35,27 @@ pub enum PolicyError {
     DuplicateGroup(GroupId),
 }
 
-/// Extra minutes the parent granted for one budget day.
+/// Time the parent added to or took from one budget day's quota.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Bonus {
-    /// The day the bonus applies to.
+pub struct Adjustment {
+    /// The day the adjustment applies to.
     pub day: BudgetDay,
-    /// How many minutes it adds to the quota.
-    pub minutes: Minutes,
+    /// Minutes added (positive) or taken away (negative).
+    pub minutes: MinuteDelta,
+}
+
+/// Time allowed during `day`: the quota of its weekday changed by the
+/// parent's adjustments for that day, never below zero.
+///
+/// Adjustments change only the amount of time; they never open a window.
+#[must_use]
+pub fn allowance(schedule: &WeekSchedule, adjustments: &[Adjustment], day: BudgetDay) -> Minutes {
+    let change: MinuteDelta = adjustments
+        .iter()
+        .filter(|adjustment| adjustment.day == day)
+        .map(|adjustment| adjustment.minutes)
+        .sum();
+    change.apply(schedule.day(day.weekday()).quota())
 }
 
 /// Usage accumulated during one budget day.
@@ -68,9 +82,9 @@ pub struct GroupPolicy {
     /// Whether the parent has blocked the group until further notice.
     #[serde(default)]
     pub blocked: bool,
-    /// Bonus minutes by day.
+    /// The parent's changes to the quota, by day.
     #[serde(default)]
-    pub bonuses: Vec<Bonus>,
+    pub adjustments: Vec<Adjustment>,
     /// Usage on other devices as known to the server at the last sync.
     ///
     /// This device's own usage always comes from its local journal, so the
@@ -80,16 +94,10 @@ pub struct GroupPolicy {
 }
 
 impl GroupPolicy {
-    /// Total bonus granted for `day`.
+    /// Time allowed during `day` on all devices together; see [`allowance`].
     #[must_use]
-    pub fn bonus(&self, day: BudgetDay) -> Minutes {
-        let total = self
-            .bonuses
-            .iter()
-            .filter(|bonus| bonus.day == day)
-            .map(|bonus| bonus.minutes.get())
-            .sum();
-        Minutes::new(total)
+    pub fn allowance(&self, day: BudgetDay) -> Minutes {
+        allowance(&self.schedule, &self.adjustments, day)
     }
 
     /// Usage on other devices during `day`.

@@ -19,10 +19,10 @@
     <div class="muted">осталось · использовано {{ group.used }} из {{ group.allowance }}</div>
     <p class="{{ group.tone }}">{{ group.state }}</p>
     <div class="actions">
-      {% for minutes in bonuses %}
-      <form method="post" action="/groups/{{ group.id }}/bonus">
+      {% for minutes in adjustments %}
+      <form method="post" action="/groups/{{ group.id }}/adjust">
         <input type="hidden" name="minutes" value="{{ minutes }}">
-        <button type="submit">+{{ minutes }} мин</button>
+        <button type="submit">{% if *minutes > 0 %}+{{ minutes }}{% else %}−{{ minutes.unsigned_abs() }}{% endif %} мин</button>
       </form>
       {% endfor %}
       {% if group.blocked %}

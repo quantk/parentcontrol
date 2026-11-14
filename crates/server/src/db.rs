@@ -23,7 +23,10 @@ use thiserror::Error;
 pub(crate) const DEFAULT_PROFILE: ProfileId = ProfileId::new(1);
 
 /// Migrations by resulting schema version; never edit a released one.
-const MIGRATIONS: &[&str] = &[include_str!("db/schema.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("db/migrations/0001_initial.sql"),
+    include_str!("db/migrations/0002_adjustments.sql"),
+];
 
 /// A storage failure.
 #[derive(Debug, Error)]
@@ -115,5 +118,23 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
         assert_eq!(version as usize, MIGRATIONS.len());
+    }
+
+    #[test]
+    fn bonuses_become_adjustments() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(MIGRATIONS[0]).unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO program_groups (id, profile_id, name, schedule) VALUES (1, 1, 'Игры', '{}');
+                 INSERT INTO bonuses (group_id, day, minutes) VALUES (1, '2026-11-14', 15);",
+            )
+            .unwrap();
+        migrate(&mut connection).unwrap();
+        let minutes: i32 = connection
+            .query_row("SELECT minutes FROM adjustments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(minutes, 15);
     }
 }

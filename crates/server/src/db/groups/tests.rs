@@ -39,35 +39,35 @@ async fn group_lifecycle() {
 }
 
 #[tokio::test]
-async fn bonuses_are_filtered_by_day() {
+async fn adjustments_are_filtered_by_day() {
     let db = Db::in_memory().unwrap();
     db.call(|c| {
         let games = create(c, DEFAULT_PROFILE, "Игры")?;
         let yesterday = BudgetDay::new(day_14().date().yesterday().unwrap());
-        add_bonus(
+        add_adjustment(
             c,
             games,
-            Bonus {
+            Adjustment {
                 day: yesterday,
-                minutes: Minutes::new(5),
+                minutes: MinuteDelta::new(-5),
             },
         )?;
-        add_bonus(
+        add_adjustment(
             c,
             games,
-            Bonus {
+            Adjustment {
                 day: day_14(),
-                minutes: Minutes::new(15),
+                minutes: MinuteDelta::new(15),
             },
         )?;
-        let bonuses = bonuses_since(c, day_14())?;
+        let adjustments = adjustments_since(c, day_14())?;
         assert_eq!(
-            bonuses,
+            adjustments,
             [(
                 games,
-                Bonus {
+                Adjustment {
                     day: day_14(),
-                    minutes: Minutes::new(15)
+                    minutes: MinuteDelta::new(15)
                 }
             )]
         );
@@ -78,23 +78,23 @@ async fn bonuses_are_filtered_by_day() {
 }
 
 #[tokio::test]
-async fn deleting_a_group_removes_its_rules_and_bonuses() {
+async fn deleting_a_group_removes_its_rules_and_adjustments() {
     let db = Db::in_memory().unwrap();
     db.call(|c| {
         let games = create(c, DEFAULT_PROFILE, "Игры")?;
         add_rule(c, games, &Rule::Builtin(BuiltinProfile::MinecraftJava))?;
-        add_bonus(
+        add_adjustment(
             c,
             games,
-            Bonus {
+            Adjustment {
                 day: day_14(),
-                minutes: Minutes::new(15),
+                minutes: MinuteDelta::new(15),
             },
         )?;
         delete(c, games)?;
         let rules: i64 = c.query_row("SELECT count(*) FROM rules", [], |row| row.get(0))?;
         assert_eq!(rules, 0);
-        assert_eq!(bonuses_since(c, day_14())?, []);
+        assert_eq!(adjustments_since(c, day_14())?, []);
         Ok(())
     })
     .await

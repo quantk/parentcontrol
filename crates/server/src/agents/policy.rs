@@ -13,8 +13,8 @@ use crate::db::{DEFAULT_PROFILE, DbError, devices, groups, settings, usage};
 /// The policy of `device` at `now`, or `None` if the device was deleted.
 ///
 /// Every account bound on the device is limited by the groups of the one
-/// profile the interface manages. Bonuses of yesterday are included too,
-/// so a device whose clock is slightly behind still applies them.
+/// profile the interface manages. Adjustments of yesterday are included
+/// too, so a device whose clock is slightly behind still applies them.
 pub(crate) fn device_policy(
     connection: &Connection,
     device: DeviceId,
@@ -26,7 +26,7 @@ pub(crate) fn device_policy(
     let calendar = settings::required_calendar(connection)?;
     let today = calendar.locate(now).day;
     let yesterday = BudgetDay::new(today.date().yesterday().unwrap_or(today.date()));
-    let bonuses = groups::bonuses_since(connection, yesterday)?;
+    let adjustments = groups::adjustments_since(connection, yesterday)?;
     let totals = usage::totals(connection, today, today)?;
 
     let groups = groups::list(connection, DEFAULT_PROFILE)?
@@ -39,10 +39,10 @@ pub(crate) fn device_policy(
                 .sum();
             GroupPolicy {
                 id: group.id,
-                bonuses: bonuses
+                adjustments: adjustments
                     .iter()
                     .filter(|(id, _)| *id == group.id)
-                    .map(|(_, bonus)| *bonus)
+                    .map(|(_, adjustment)| *adjustment)
                     .collect(),
                 name: group.name,
                 rules: group.rules.into_iter().map(|stored| stored.rule).collect(),

@@ -19,7 +19,7 @@ pub enum DenyReason {
     Blocked,
     /// The current moment is outside every allowed window.
     OutsideWindow,
-    /// Today's quota, including bonuses, is used up.
+    /// Today's allowance, adjustments included, is used up.
     QuotaExhausted,
 }
 
@@ -80,7 +80,7 @@ pub fn evaluate(
     local_usage: Duration,
 ) -> GroupStatus {
     let day = group.schedule.day(position.day.weekday());
-    let allowance = day.quota().to_duration() + group.bonus(position.day).to_duration();
+    let allowance = group.allowance(position.day).to_duration();
     let remaining = allowance
         .saturating_sub(group.remote_usage(position.day))
         .saturating_sub(local_usage);

@@ -18,6 +18,7 @@ use parentcontrol_core::process::OsUser;
 use parentcontrol_core::protocol::{
     AgentMessage, AgentToken, DevicePlatform, PROTOCOL_VERSION, Rejection, ServerMessage,
 };
+use parentcontrol_core::units::Minutes;
 use parentcontrol_core::usage::{UsageRecord, UsageRecordId};
 use uuid::Uuid;
 
@@ -84,6 +85,48 @@ fn policy_of(message: &ServerMessage) -> Option<&parentcontrol_core::policy::Pol
         ServerMessage::Policy { policy, .. } => Some(policy),
         _ => None,
     }
+}
+
+/// Extra time, a set amount left and time taken away are each pushed at
+/// once; the child has used 10 minutes of the default hour.
+async fn time_changes_reach_the_agent(server: &TestServer, cookie: &str, pc: &mut Agent) {
+    let allowance_of = |message: &ServerMessage| {
+        policy_of(message).map(|p| {
+            let day = p.calendar().locate(Timestamp::now()).day;
+            p.groups()[0].allowance(day)
+        })
+    };
+    let quota = Minutes::new(60);
+    server
+        .http(
+            "POST",
+            "/groups/1/adjust",
+            Some(cookie),
+            &[("minutes", "15")],
+        )
+        .await;
+    pc.receive_until(|m| allowance_of(m) == Some(Minutes::new(quota.get() + 15)))
+        .await;
+    server
+        .http(
+            "POST",
+            "/groups/1/remaining",
+            Some(cookie),
+            &[("minutes", "5")],
+        )
+        .await;
+    pc.receive_until(|m| allowance_of(m) == Some(Minutes::new(10 + 5)))
+        .await;
+    server
+        .http(
+            "POST",
+            "/groups/1/adjust",
+            Some(cookie),
+            &[("minutes", "-30")],
+        )
+        .await;
+    pc.receive_until(|m| allowance_of(m) == Some(Minutes::ZERO))
+        .await;
 }
 
 #[tokio::test]
@@ -153,17 +196,7 @@ async fn panel_changes_reach_agents_and_usage_reaches_the_panel() {
     );
     assert!(home.body.contains("Играют сейчас"));
 
-    // A bonus is pushed at once.
-    server
-        .http(
-            "POST",
-            "/groups/1/bonus",
-            Some(&cookie),
-            &[("minutes", "15")],
-        )
-        .await;
-    pc.receive_until(|m| policy_of(m).is_some_and(|p| !p.groups()[0].bonuses.is_empty()))
-        .await;
+    time_changes_reach_the_agent(&server, &cookie, &mut pc).await;
 
     // A second device's usage counts against the first device's budget.
     let laptop_token = enroll(&server, &new_device(&server, &cookie, "Ноутбук").await).await;
@@ -195,7 +228,7 @@ async fn panel_changes_reach_agents_and_usage_reaches_the_panel() {
         "late usage is marked offline"
     );
     assert!(
-        history.body.contains("Бонус +15 мин: Игры"),
+        history.body.contains("Игры: +15 мин на сегодня"),
         "the parent's actions are logged"
     );
 }

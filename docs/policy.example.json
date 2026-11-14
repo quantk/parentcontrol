@@ -20,7 +20,7 @@
         "sunday":    { "quota": 120, "windows": [{ "start": "10:00", "end": "21:00" }] }
       },
       "blocked": false,
-      "bonuses": [{ "day": "2026-11-14", "minutes": 15 }]
+      "adjustments": [{ "day": "2026-11-14", "minutes": 15 }, { "day": "2026-11-14", "minutes": -5 }]
     }
   ]
 }

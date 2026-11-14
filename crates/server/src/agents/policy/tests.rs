@@ -1,9 +1,9 @@
 use jiff::tz::TimeZone;
 use parentcontrol_core::calendar::Calendar;
-use parentcontrol_core::policy::Bonus;
+use parentcontrol_core::policy::Adjustment;
 use parentcontrol_core::process::OsUser;
 use parentcontrol_core::protocol::DevicePlatform;
-use parentcontrol_core::units::Minutes;
+use parentcontrol_core::units::MinuteDelta;
 use parentcontrol_core::usage::{UsageRecord, UsageRecordId};
 use uuid::Uuid;
 
@@ -29,7 +29,7 @@ fn record(id: u128, group: parentcontrol_core::ids::GroupId, seconds: u64) -> Us
 }
 
 #[tokio::test]
-async fn policy_combines_bindings_groups_bonuses_and_other_devices_usage() {
+async fn policy_combines_bindings_groups_adjustments_and_other_devices_usage() {
     let db = Db::in_memory().unwrap();
     let policy = db
         .call(|c| {
@@ -40,12 +40,12 @@ async fn policy_combines_bindings_groups_bonuses_and_other_devices_usage() {
             settings::set_calendar(c, &calendar)?;
             let games = groups::create(c, DEFAULT_PROFILE, "Игры")?;
             let today = calendar.locate(at(NOW)).day;
-            groups::add_bonus(
+            groups::add_adjustment(
                 c,
                 games,
-                Bonus {
+                Adjustment {
                     day: today,
-                    minutes: Minutes::new(15),
+                    minutes: MinuteDelta::new(15),
                 },
             )?;
 
@@ -66,7 +66,7 @@ async fn policy_combines_bindings_groups_bonuses_and_other_devices_usage() {
     assert!(policy.restricts(&OsUser::new("kid")));
     let group = &policy.groups()[0];
     assert_eq!(group.name, "Игры");
-    assert_eq!(group.bonuses.len(), 1);
+    assert_eq!(group.adjustments.len(), 1);
     let today = policy.calendar().locate(at(NOW)).day;
     assert_eq!(
         group.remote_usage(today),

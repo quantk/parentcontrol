@@ -4,6 +4,7 @@
 //! the page, with an error message in the query string when the input was
 //! rejected. Changes that affect devices notify the agents at once.
 
+mod controls;
 mod devices;
 mod format;
 mod groups;
@@ -38,9 +39,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/groups/{id}/rename", post(groups::rename))
         .route("/groups/{id}/delete", post(groups::delete))
         .route("/groups/{id}/rules", post(groups::add_rule))
-        .route("/groups/{id}/bonus", post(home::bonus))
-        .route("/groups/{id}/block", post(home::block))
-        .route("/groups/{id}/unblock", post(home::unblock))
+        .route("/groups/{id}/adjust", post(controls::adjust))
+        .route("/groups/{id}/remaining", post(controls::set_remaining))
+        .route("/groups/{id}/block", post(controls::block))
+        .route("/groups/{id}/unblock", post(controls::unblock))
         .route("/groups/{id}/schedule", post(schedule::save))
         .route("/rules/{id}/delete", post(groups::delete_rule))
         .route("/schedule", get(schedule::page))

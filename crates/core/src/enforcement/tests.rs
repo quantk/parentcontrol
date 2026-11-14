@@ -102,7 +102,7 @@ fn no_warning_while_nothing_runs_but_it_comes_on_launch() {
 }
 
 #[test]
-fn bonus_rearms_warnings() {
+fn added_time_rearms_warnings() {
     let mut enforcer = Enforcer::default();
     enforcer.step(
         &observe(allowed(minutes(1), StopReason::QuotaEnd), &[10]),

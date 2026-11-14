@@ -48,7 +48,7 @@ pub(crate) fn group(quota: u32, windows: &[(&str, &str)]) -> GroupPolicy {
         rules: vec![Rule::Builtin(BuiltinProfile::MinecraftJava)],
         schedule: WeekSchedule::every_day(&DaySchedule::new(Minutes::new(quota), windows).unwrap()),
         blocked: false,
-        bonuses: Vec::new(),
+        adjustments: Vec::new(),
         remote_usage: None,
     }
 }

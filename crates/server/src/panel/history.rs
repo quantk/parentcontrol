@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use jiff::{Timestamp, ToSpan};
 use parentcontrol_core::calendar::BudgetDay;
 use parentcontrol_core::ids::{DeviceId, GroupId};
+use parentcontrol_core::policy::{self, Adjustment};
 use serde::Deserialize;
 
 use super::{Layout, format, render, status};
@@ -70,7 +71,7 @@ struct Stored {
     today: BudgetDay,
     selected: BudgetDay,
     groups: Vec<groups::Group>,
-    bonuses: Vec<(GroupId, parentcontrol_core::policy::Bonus)>,
+    adjustments: Vec<(GroupId, Adjustment)>,
     devices: Vec<devices::Device>,
     totals: Vec<usage::DayTotal>,
     sessions: Vec<usage::Session>,
@@ -103,7 +104,7 @@ pub(super) async fn page(
             let selected = query.day.map_or(today, BudgetDay::new);
             Ok(Stored {
                 groups: groups::list(c, DEFAULT_PROFILE)?,
-                bonuses: groups::bonuses_since(c, first)?,
+                adjustments: groups::adjustments_since(c, first)?,
                 devices: devices::list(c)?,
                 totals: usage::totals(c, first, today)?,
                 sessions: usage::sessions(c, selected)?,
@@ -215,13 +216,8 @@ fn cell(data: &Stored, names: &Names<'_>, group: &groups::Group, day: BudgetDay)
         return None;
     }
     let used: Duration = totals.iter().map(|total| total.used).sum();
-    let bonuses: Vec<_> = data
-        .bonuses
-        .iter()
-        .filter(|(id, _)| *id == group.id)
-        .map(|(_, bonus)| *bonus)
-        .collect();
-    let allowance = status::allowance(group, &bonuses, day);
+    let adjustments = status::of_group(&data.adjustments, group.id);
+    let allowance = policy::allowance(&group.schedule, &adjustments, day).to_duration();
     let overspend = used.saturating_sub(allowance);
     Some(Cell {
         group: group.name.clone(),

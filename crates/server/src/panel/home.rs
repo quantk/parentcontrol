@@ -4,28 +4,24 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use askama::Template;
-use axum::Form;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use jiff::Timestamp;
 use parentcontrol_core::budget::{Availability, DenyReason, StopReason};
 use parentcontrol_core::ids::{DeviceId, GroupId};
-use parentcontrol_core::policy::Bonus;
-use parentcontrol_core::units::Minutes;
-use serde::Deserialize;
 
 use super::status::{self, GroupToday};
-use super::{Feedback, Layout, back, changed, format, render};
+use super::{Feedback, Layout, format, render};
 use crate::auth::Parent;
-use crate::db::{devices, groups, settings};
+use crate::db::devices;
 use crate::error::AppError;
 use crate::state::AppState;
 
 /// A device that has not reported for this long is shown as lost.
 pub(super) const STALE_AFTER: Duration = Duration::from_hours(1);
 
-/// Bonuses the panel offers.
-const BONUS_CHOICES: [u32; 3] = [15, 30, 60];
+/// Changes of today's time the panel offers, in minutes.
+const ADJUSTMENTS: [i32; 4] = [-15, 15, 30, 60];
 
 struct GroupCard {
     id: GroupId,
@@ -59,7 +55,7 @@ struct HomePage {
     groups: Vec<GroupCard>,
     playing: Vec<PlayingRow>,
     devices: Vec<DeviceRow>,
-    bonuses: [u32; 3],
+    adjustments: [i32; 4],
 }
 
 pub(super) async fn page(
@@ -122,7 +118,7 @@ pub(super) async fn page(
         groups: today.groups.iter().map(|group| card(group, zone)).collect(),
         playing,
         devices,
-        bonuses: BONUS_CHOICES,
+        adjustments: ADJUSTMENTS,
     };
     Ok(render(&page)?.into_response())
 }
@@ -160,80 +156,4 @@ fn card(today: &GroupToday, zone: &jiff::tz::TimeZone) -> GroupCard {
         tone,
         blocked: today.group.blocked_since.is_some(),
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct BonusForm {
-    minutes: u32,
-}
-
-pub(super) async fn bonus(
-    State(state): State<AppState>,
-    _: Parent,
-    Path(group): Path<GroupId>,
-    Form(form): Form<BonusForm>,
-) -> Result<Response, AppError> {
-    if !(1..=24 * 60).contains(&form.minutes) {
-        return Ok(back("/", Some("Бонус должен быть от 1 минуты до 24 часов.")).into_response());
-    }
-    let minutes = Minutes::new(form.minutes);
-    let name = state
-        .db
-        .call(move |c| {
-            let day = settings::required_calendar(c)?.locate(Timestamp::now()).day;
-            let name = groups::name(c, group)?;
-            if name.is_some() {
-                groups::add_bonus(c, group, Bonus { day, minutes })?;
-            }
-            Ok(name)
-        })
-        .await?;
-    let Some(name) = name else {
-        return Ok(back("/", Some("Группа не найдена.")).into_response());
-    };
-    changed(&state, format!("Бонус +{} мин: {name}", minutes.get())).await?;
-    Ok(back("/", None).into_response())
-}
-
-pub(super) async fn block(
-    state: State<AppState>,
-    parent: Parent,
-    group: Path<GroupId>,
-) -> Result<Response, AppError> {
-    set_blocked(state, parent, group, true).await
-}
-
-pub(super) async fn unblock(
-    state: State<AppState>,
-    parent: Parent,
-    group: Path<GroupId>,
-) -> Result<Response, AppError> {
-    set_blocked(state, parent, group, false).await
-}
-
-async fn set_blocked(
-    State(state): State<AppState>,
-    _: Parent,
-    Path(group): Path<GroupId>,
-    blocked: bool,
-) -> Result<Response, AppError> {
-    let since = blocked.then(Timestamp::now);
-    let name = state
-        .db
-        .call(move |c| {
-            let name = groups::name(c, group)?;
-            groups::set_blocked(c, group, since)?;
-            Ok(name)
-        })
-        .await?;
-    let Some(name) = name else {
-        return Ok(back("/", Some("Группа не найдена.")).into_response());
-    };
-    let verb = if blocked {
-        "Блокировка"
-    } else {
-        "Разблокировка"
-    };
-    changed(&state, format!("{verb}: {name}")).await?;
-    Ok(back("/", None).into_response())
 }

@@ -1,9 +1,9 @@
 use proptest::prelude::*;
 
 use super::*;
-use crate::policy::{Bonus, DayUsage};
+use crate::policy::{Adjustment, DayUsage};
 use crate::test_support::{at, day_start, group, minutes, saturday, time};
-use crate::units::Minutes;
+use crate::units::MinuteDelta;
 
 fn status(group: &GroupPolicy, clock: &str, local: u64) -> GroupStatus {
     evaluate(group, day_start(), at(clock), minutes(local))
@@ -96,32 +96,41 @@ fn window_wins_over_quota() {
     );
 }
 
+fn adjust(group: &mut GroupPolicy, day: crate::calendar::BudgetDay, minutes: i32) {
+    group.adjustments.push(Adjustment {
+        day,
+        minutes: MinuteDelta::new(minutes),
+    });
+}
+
 #[test]
-fn bonus_extends_quota_of_its_day_only() {
+fn adjustments_change_the_quota_of_their_day_only() {
     let mut group = group(30, &[]);
-    group.bonuses.push(Bonus {
-        day: saturday(),
-        minutes: Minutes::new(15),
-    });
-    group.bonuses.push(Bonus {
-        day: saturday(),
-        minutes: Minutes::new(10),
-    });
+    adjust(&mut group, saturday(), 15);
+    adjust(&mut group, saturday(), 10);
     let next_day = crate::calendar::BudgetDay::new(saturday().date().tomorrow().unwrap());
-    group.bonuses.push(Bonus {
-        day: next_day,
-        minutes: Minutes::new(100),
-    });
+    adjust(&mut group, next_day, 100);
     assert_eq!(status(&group, "12:00", 30).remaining, minutes(25));
 }
 
 #[test]
-fn bonus_does_not_open_a_closed_window() {
+fn taking_time_away_can_end_the_day() {
+    let mut group = group(60, &[]);
+    adjust(&mut group, saturday(), -20);
+    assert_eq!(status(&group, "12:00", 30).remaining, minutes(10));
+    adjust(&mut group, saturday(), -100);
+    let status = status(&group, "12:00", 30);
+    assert_eq!(status.remaining, Duration::ZERO);
+    assert_eq!(
+        status.availability,
+        Availability::Denied(DenyReason::QuotaExhausted)
+    );
+}
+
+#[test]
+fn added_time_does_not_open_a_closed_window() {
     let mut group = group(30, &[("16:00", "20:00")]);
-    group.bonuses.push(Bonus {
-        day: saturday(),
-        minutes: Minutes::new(60),
-    });
+    adjust(&mut group, saturday(), 60);
     assert_eq!(
         status(&group, "21:00", 0).availability,
         Availability::Denied(DenyReason::OutsideWindow)
@@ -171,17 +180,18 @@ proptest! {
     #[test]
     fn remaining_never_exceeds_allowance_and_shrinks_with_use(
         quota in 0_u32..=1440,
-        bonus in 0_u32..600,
+        adjustment in -600_i32..600,
         used in 0_u64..2000,
         extra in 0_u64..100,
         minute in 0_u16..1440,
     ) {
         let mut group = group(quota, &[]);
-        group.bonuses.push(Bonus { day: saturday(), minutes: Minutes::new(bonus) });
+        adjust(&mut group, saturday(), adjustment);
         let clock = day_start().plus_minutes(minute).to_string();
         let less = status(&group, &clock, used);
         let more = status(&group, &clock, used + extra);
-        prop_assert!(less.remaining <= minutes(u64::from(quota + bonus)));
+        let allowance = u64::try_from((i64::from(quota) + i64::from(adjustment)).max(0)).unwrap();
+        prop_assert!(less.remaining <= minutes(allowance));
         prop_assert!(more.remaining <= less.remaining);
         prop_assert_eq!(less.remaining.is_zero(), matches!(less.availability, Availability::Denied(_)));
     }

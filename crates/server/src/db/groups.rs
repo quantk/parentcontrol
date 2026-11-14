@@ -1,12 +1,12 @@
-//! Program groups with their rules, schedules, blocks and bonuses.
+//! Program groups with their rules, schedules, blocks and adjustments.
 
 use jiff::Timestamp;
 use parentcontrol_core::calendar::BudgetDay;
 use parentcontrol_core::ids::{GroupId, ProfileId};
-use parentcontrol_core::policy::Bonus;
+use parentcontrol_core::policy::Adjustment;
 use parentcontrol_core::rules::Rule;
 use parentcontrol_core::schedule::{DaySchedule, WeekSchedule};
-use parentcontrol_core::units::Minutes;
+use parentcontrol_core::units::{MinuteDelta, Minutes};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::DbError;
@@ -116,7 +116,7 @@ pub(crate) fn rename(connection: &Connection, group: GroupId, name: &str) -> Res
     )? > 0)
 }
 
-/// Deletes a group with its rules and bonuses; usage history stays.
+/// Deletes a group with its rules and adjustments; usage history stays.
 pub(crate) fn delete(connection: &Connection, group: GroupId) -> Result<bool, DbError> {
     Ok(connection.execute("DELETE FROM program_groups WHERE id = ?1", [group.get()])? > 0)
 }
@@ -166,41 +166,45 @@ pub(crate) fn delete_rule(connection: &Connection, rule: i64) -> Result<bool, Db
     Ok(connection.execute("DELETE FROM rules WHERE id = ?1", [rule])? > 0)
 }
 
-/// Grants a bonus.
-pub(crate) fn add_bonus(
+/// Records a change of a day's allowance.
+pub(crate) fn add_adjustment(
     connection: &Connection,
     group: GroupId,
-    bonus: Bonus,
+    adjustment: Adjustment,
 ) -> Result<(), DbError> {
     connection.execute(
-        "INSERT INTO bonuses (group_id, day, minutes) VALUES (?1, ?2, ?3)",
-        params![group.get(), bonus.day.to_string(), bonus.minutes.get()],
+        "INSERT INTO adjustments (group_id, day, minutes) VALUES (?1, ?2, ?3)",
+        params![
+            group.get(),
+            adjustment.day.to_string(),
+            adjustment.minutes.get()
+        ],
     )?;
     Ok(())
 }
 
-/// Bonuses of every group granted for `since` or later.
-pub(crate) fn bonuses_since(
+/// Adjustments of every group for `since` or later, oldest first.
+pub(crate) fn adjustments_since(
     connection: &Connection,
     since: BudgetDay,
-) -> Result<Vec<(GroupId, Bonus)>, DbError> {
+) -> Result<Vec<(GroupId, Adjustment)>, DbError> {
     let mut statement = connection
-        .prepare("SELECT group_id, day, minutes FROM bonuses WHERE day >= ?1 ORDER BY id")?;
+        .prepare("SELECT group_id, day, minutes FROM adjustments WHERE day >= ?1 ORDER BY id")?;
     statement
         .query_map([since.to_string()], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
+                row.get::<_, i32>(2)?,
             ))
         })?
         .map(|row| {
             let (group, text, minutes) = row?;
-            let bonus = Bonus {
-                day: day(&text, "bonuses.day")?,
-                minutes: Minutes::new(minutes),
+            let adjustment = Adjustment {
+                day: day(&text, "adjustments.day")?,
+                minutes: MinuteDelta::new(minutes),
             };
-            Ok((GroupId::new(group), bonus))
+            Ok((GroupId::new(group), adjustment))
         })
         .collect()
 }
