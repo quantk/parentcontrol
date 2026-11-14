@@ -1,0 +1,38 @@
+# parentcontrol server on the home server.
+#
+#   docker compose up -d --build                # start or update
+#   docker compose run --rm server set-password # set the panel password
+#   docker compose logs -f server               # watch the log
+#
+# Data (database, generated certificate) lives in the `data` volume and
+# survives recreating the container and updating the image.
+
+name: parentcontrol
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: parentcontrol-server
+    restart: unless-stopped
+    environment:
+      # Budget days and windows are counted in this zone on every PC. Set
+      # here explicitly so the container's own zone does not matter. Used on
+      # first start; afterwards the panel's settings page changes it.
+      PARENTCONTROL_TIME_ZONE: Europe/Moscow
+      PARENTCONTROL_DAY_START: "04:00"
+    ports:
+      # Published on the home network address only, not on every interface.
+      - "${PARENTCONTROL_BIND:-192.168.1.135}:8443:8443"
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "/parentcontrol-server", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  data:

@@ -1,0 +1,7 @@
+/target
+/result
+/.direnv
+/.git
+# The image's toolchain builds the server; rustup would otherwise fetch the
+# pinned one with its extra Windows and musl targets.
+/rust-toolchain.toml
