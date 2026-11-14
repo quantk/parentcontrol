@@ -59,7 +59,7 @@ async fn offline_flag_sticks_once_set() {
         };
         merge(c, PC, &[offline])?;
         merge(c, PC, &[record(1, "2026-11-14T10:00:00Z", 120)])?;
-        assert!(sessions(c, day_14())?[0].offline);
+        assert!(sessions(c, day_14(), day_14())?[0].offline);
         Ok(())
     })
     .await
@@ -73,7 +73,10 @@ async fn a_device_cannot_overwrite_another_devices_record() {
         merge(c, PC, &[record(1, "2026-11-14T10:00:00Z", 60)])?;
         let acks = merge(c, LAPTOP, &[record(1, "2026-11-14T10:00:00Z", 6000)])?;
         assert_eq!(acks, []);
-        assert_eq!(sessions(c, day_14())?[0].duration, Duration::from_secs(60));
+        assert_eq!(
+            sessions(c, day_14(), day_14())?[0].duration,
+            Duration::from_secs(60)
+        );
         Ok(())
     })
     .await

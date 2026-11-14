@@ -1,64 +1,211 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>История</h1>
-
-<section class="card">
-  <h2>По дням</h2>
-  <p class="muted">Норма — по текущему расписанию с поправками родителя за тот день. «Офлайн» — часть времени насчитана без связи с сервером, поэтому возможен перерасход.</p>
-  <div class="scroll">
-    <table>
-      <tr><th>День</th><th>Группа</th><th>Использовано</th><th>По устройствам</th></tr>
-      {% for row in days %}
-      {% if row.cells.is_empty() %}
-      <tr><td><a href="/history?day={{ row.day }}">{{ row.label }}</a></td><td colspan="3" class="muted">—</td></tr>
-      {% else %}
-      {% for cell in row.cells %}
-      <tr>
-        <td>{% if loop.first %}<a href="/history?day={{ row.day }}">{{ row.label }}</a>{% endif %}</td>
-        <td>{{ cell.group }}</td>
-        <td>
-          {{ cell.used }} из {{ cell.allowance }}
-          {% if let Some(overspend) = cell.overspend %}<br><span class="bad">перерасход {{ overspend }}</span>{% endif %}
-          {% if cell.offline %}<br><span class="warn">офлайн</span>{% endif %}
-        </td>
-        <td class="muted">{{ cell.devices }}</td>
-      </tr>
-      {% endfor %}
-      {% endif %}
-      {% endfor %}
-    </table>
+<div class="page-head">
+  <div>
+    <h1>История</h1>
+    <p>Сколько и когда использовались программы из групп на всех компьютерах.</p>
   </div>
+  <nav class="segmented" aria-label="Период">
+    {% for choice in periods %}
+    <a class="button small{% if choice.selected %} selected{% endif %}" href="{{ choice.link }}"{% if choice.selected %} aria-current="true"{% endif %}>{{ choice.label }}</a>
+    {% endfor %}
+  </nav>
+</div>
+
+{% if !group_filter.is_empty() %}
+<nav class="chips" aria-label="Группа">
+  {% for choice in group_filter %}
+  <a class="chip{% if choice.selected %} selected{% endif %}" href="{{ choice.link }}"{% if choice.selected %} aria-current="true"{% endif %}>{{ choice.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+<div class="stats">
+  {% for stat in stats %}
+  <section class="card stat{% if stat.alert %} alert{% endif %}">
+    <span class="stat-label">{{ stat.label }}</span>
+    <span class="stat-value">{% if stat.alert %}{{ Icon("alert") }}{% endif %}{{ stat.value }}</span>
+    <span class="stat-note">{{ stat.note }}</span>
+  </section>
+  {% endfor %}
+</div>
+
+<section class="card" id="daily-chart">
+  <div class="card-head">
+    <div>
+      <h2>По дням</h2>
+      <p>Нажмите на день, чтобы увидеть его сеансы.{% if daily.shows_allowance %} Чёрточка — сколько было можно.{% endif %}</p>
+    </div>
+    {% if daily.legend.len() > 1 %}
+    <ul class="legend">
+      {% for item in daily.legend %}<li><span class="swatch {{ item.class }}"></span>{{ item.name }} <span class="muted">{{ item.total }}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="column-chart{% if period_days > 30 %} dense{% endif %}">
+    <div class="axis" aria-hidden="true">
+      {% for tick in daily.scale.ticks %}<span style="--at: {{ tick.at }}">{{ tick.label }}</span>{% endfor %}
+    </div>
+    <div class="plot">
+      <div class="gridlines" aria-hidden="true">
+        {% for tick in daily.scale.ticks %}<span style="--at: {{ tick.at }}"></span>{% endfor %}
+      </div>
+      <div class="bars">
+        {% for (column, link) in daily.columns %}
+        <a class="column{% if column.selected %} selected{% endif %}{% if column.over %} over{% endif %}" href="{{ link }}"
+           hx-target="#day" hx-select="#day" hx-swap="outerHTML show:none" hx-select-oob="#daily-chart"
+           data-tip="{{ column.tip }}" aria-label="{{ column.tip }}">
+          <span class="segments">
+            {% for stack in column.stacks %}<span class="{{ stack.series }}" style="--h: {{ stack.height }}"></span>{% endfor %}
+          </span>
+          {% if let Some(allowance) = column.allowance %}<span class="allowance" style="--at: {{ allowance }}"></span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+      <div class="labels" aria-hidden="true">
+        {% for (column, _) in daily.columns %}<span>{% if let Some(label) = column.label %}{{ label }}{% endif %}</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <details class="disclosure">
+    <summary>Таблица по дням</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>День</th><th class="numeric">Использовано</th><th class="numeric">Можно было</th><th>Отметки</th></tr></thead>
+        <tbody>
+          {% for row in table %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="numeric">{{ row.used }}</td>
+            <td class="numeric">{% if let Some(allowance) = row.allowance %}{{ allowance }}{% else %}—{% endif %}</td>
+            <td>
+              {% if let Some(overspend) = row.overspend %}<span class="badge bad">перерасход {{ overspend }}</span>{% endif %}
+              {% if row.offline %}<span class="badge warn">без связи</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">«Можно было» — по нынешнему расписанию с поправками родителя за тот день. «Без связи» — часть времени насчитана, пока компьютер не был связан с сервером, поэтому возможен перерасход.</p>
+  </details>
 </section>
 
-<section class="card">
-  <h2>Сеансы за {{ selected }}</h2>
-  {% if sessions.is_empty() %}
-  <p class="muted">Сеансов нет.</p>
-  {% else %}
-  <div class="scroll">
-    <table>
-      <tr><th>Начало</th><th>Устройство</th><th>Группа</th><th>Длительность</th></tr>
-      {% for session in sessions %}
-      <tr>
-        <td>{{ session.start }}</td>
-        <td>{{ session.device }}</td>
-        <td>{{ session.group }}</td>
-        <td>{{ session.duration }}{% if session.offline %} <span class="warn">офлайн</span>{% endif %}</td>
-      </tr>
+<div class="columns">
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Когда играет</h2>
+        <p>Время по дням недели и часам за период. Сутки начинаются в {{ heat_hours[0] }}.</p>
+      </div>
+    </div>
+    <div class="heatmap" role="table" aria-label="Время по дням недели и часам">
+      {% for row in heat_rows %}
+      <div class="heat-row" role="row">
+        <span class="heat-label" role="rowheader">{{ row.label }}</span>
+        {% for cell in row.cells %}<span class="heat-cell level-{{ cell.level }}" role="cell" tabindex="-1" data-tip="{{ cell.tip }}" aria-label="{{ cell.tip }}"></span>{% endfor %}
+      </div>
       {% endfor %}
-    </table>
+      <div class="heat-row heat-hours" aria-hidden="true">
+        <span class="heat-label"></span>
+        {% for hour in heat_hours %}<span>{{ hour }}</span>{% endfor %}
+      </div>
+    </div>
+    <div class="heat-scale muted small" aria-hidden="true">
+      <span>меньше</span>
+      {% for level in 1..=6 %}<span class="heat-cell level-{{ level }}"></span>{% endfor %}
+      <span>больше</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>По устройствам</h2>
+        <p>Всего за период.</p>
+      </div>
+    </div>
+    {% if devices.is_empty() %}
+    <p class="muted">За этот период ничего не запускалось.</p>
+    {% else %}
+    <ul class="hbars">
+      {% for bar in devices %}
+      <li>
+        <span class="hbar-name">{{ bar.name }}</span>
+        <span class="hbar-track"><span style="--w: {{ bar.width }}"></span></span>
+        <span class="hbar-value">{{ bar.value }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card" id="day">
+  <div class="card-head">
+    <div>
+      <h2>{{ day.title }}</h2>
+      <p>Всего {{ day.total }}</p>
+    </div>
+    <div class="actions">
+      {% if let Some(previous) = day.previous %}
+      <a class="button small icon-only" href="{{ previous }}" hx-target="#day" hx-select="#day" hx-swap="outerHTML show:none" hx-select-oob="#daily-chart" aria-label="Предыдущий день">{{ Icon("arrow-left") }}</a>
+      {% endif %}
+      {% if let Some(next) = day.next %}
+      <a class="button small icon-only" href="{{ next }}" hx-target="#day" hx-select="#day" hx-swap="outerHTML show:none" hx-select-oob="#daily-chart" aria-label="Следующий день">{{ Icon("arrow-right") }}</a>
+      {% endif %}
+    </div>
   </div>
+
+  {% if day.sessions.is_empty() %}
+  <p class="muted">В этот день ничего не запускалось.</p>
+  {% else %}
+  <div class="timeline">
+    {% for lane in day.lanes %}
+    <div class="lane">
+      <span class="lane-name">{{ lane.name }}</span>
+      <div class="lane-track">
+        {% for bar in lane.bars %}<span class="{{ bar.class }}" style="--from: {{ bar.from }}; --w: {{ bar.width }}" tabindex="0" data-tip="{{ bar.tip }}" aria-label="{{ bar.tip }}"></span>{% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="lane lane-ticks" aria-hidden="true">
+      <span class="lane-name"></span>
+      <div class="lane-track">{% for tick in day.ticks %}<span>{{ tick }}</span>{% endfor %}</div>
+    </div>
+  </div>
+
+  <details class="disclosure">
+    <summary>Сеансы ({{ day.sessions.len() }})</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Время</th><th>Группа</th><th>Устройство</th><th class="numeric">Длительность</th></tr></thead>
+        <tbody>
+          {% for session in day.sessions %}
+          <tr>
+            <td class="numeric-left">{{ session.start }}–{{ session.end }}</td>
+            <td><span class="swatch {{ session.class }}"></span>{{ session.group }}</td>
+            <td>{{ session.device }}</td>
+            <td class="numeric">{{ session.duration }}{% if session.offline %} <span class="badge warn">без связи</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>Действия родителя</h2>
+  <div class="card-head"><h2>Действия родителя</h2></div>
   {% if actions.is_empty() %}
   <p class="muted">Пока ничего.</p>
   {% else %}
-  <ul class="plain">
-    {% for action in actions %}<li><span>{{ action.summary }}</span><span class="muted">{{ action.at }}</span></li>{% endfor %}
+  <ul class="list">
+    {% for action in actions %}<li><span>{{ action.summary }}</span><span class="muted small nowrap">{{ action.at }}</span></li>{% endfor %}
   </ul>
   {% endif %}
 </section>

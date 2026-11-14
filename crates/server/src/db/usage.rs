@@ -26,6 +26,7 @@ pub(crate) struct DayTotal {
 /// A stored record with the device it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Session {
+    pub(crate) day: BudgetDay,
     pub(crate) device: DeviceId,
     pub(crate) group: GroupId,
     pub(crate) start: Timestamp,
@@ -115,24 +116,31 @@ pub(crate) fn totals(
         .collect()
 }
 
-/// Every record of `day`, in order of start.
-pub(crate) fn sessions(connection: &Connection, of: BudgetDay) -> Result<Vec<Session>, DbError> {
+/// Every record of the days from `first` to `last`, in order of start.
+pub(crate) fn sessions(
+    connection: &Connection,
+    first: BudgetDay,
+    last: BudgetDay,
+) -> Result<Vec<Session>, DbError> {
     let mut statement = connection.prepare(
-        "SELECT device_id, group_id, start, duration_ms, offline FROM usage WHERE day = ?1 ORDER BY start",
+        "SELECT day, device_id, group_id, start, duration_ms, offline FROM usage
+         WHERE day BETWEEN ?1 AND ?2 ORDER BY start",
     )?;
     statement
-        .query_map([of.to_string()], |row| {
+        .query_map([first.to_string(), last.to_string()], |row| {
             Ok((
-                row.get::<_, i64>(0)?,
+                row.get::<_, String>(0)?,
                 row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, bool>(4)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, bool>(5)?,
             ))
         })?
         .map(|row| {
-            let (device, group, start, used, offline) = row?;
+            let (text, device, group, start, used, offline) = row?;
             Ok(Session {
+                day: day(&text, "usage.day")?,
                 device: DeviceId::new(device),
                 group: GroupId::new(group),
                 start: timestamp(&start, "usage.start")?,

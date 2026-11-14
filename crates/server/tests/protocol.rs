@@ -226,7 +226,9 @@ async fn panel_changes_reach_agents_and_usage_reaches_the_panel() {
 
     let history = server.http("GET", "/history", Some(&cookie), &[]).await;
     assert!(
-        history.body.contains("офлайн"),
+        history
+            .body
+            .contains("<span class=\"badge warn\">без связи</span>"),
         "late usage is marked offline"
     );
     assert!(

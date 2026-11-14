@@ -1,11 +1,44 @@
 //! Russian presentation of times and durations for the panel.
 
+use std::fmt;
 use std::time::Duration;
 
 use jiff::Timestamp;
 use jiff::civil::Weekday;
 use jiff::tz::TimeZone;
 use parentcontrol_core::calendar::BudgetDay;
+
+/// A share written as a percentage with one decimal, for inline styles
+/// that size chart marks.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub(super) struct Percent(f64);
+
+impl Percent {
+    /// `part` of `whole`, clamped to `0%..=100%`; zero when `whole` is.
+    pub(super) fn of(part: f64, whole: f64) -> Self {
+        if whole > 0.0 {
+            Self((part / whole * 100.0).clamp(0.0, 100.0))
+        } else {
+            Self(0.0)
+        }
+    }
+
+    /// `part` of `whole`.
+    pub(super) fn of_duration(part: Duration, whole: Duration) -> Self {
+        Self::of(part.as_secs_f64(), whole.as_secs_f64())
+    }
+
+    /// The share in `0.0..=1.0`.
+    pub(super) fn fraction(self) -> f64 {
+        self.0 / 100.0
+    }
+}
+
+impl fmt::Display for Percent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.1}%", self.0)
+    }
+}
 
 /// `1 ч 05 мин`, `25 мин`, `0 мин`, rounded to the nearest minute.
 pub(super) fn duration(duration: Duration) -> String {
@@ -107,6 +140,13 @@ pub(super) const fn weekday_short(weekday: Weekday) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn percentages_are_clamped() {
+        assert_eq!(Percent::of(1.0, 4.0).to_string(), "25.0%");
+        assert_eq!(Percent::of(5.0, 4.0).to_string(), "100.0%");
+        assert_eq!(Percent::of(1.0, 0.0).to_string(), "0.0%");
+    }
 
     #[test]
     fn durations_read_naturally() {

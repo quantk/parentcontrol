@@ -3,14 +3,12 @@
 //! The same structure renders stored schedules and the parent's
 //! submission, so a rejected submission comes back with every edit kept.
 
-use std::fmt;
-
 use jiff::civil::Weekday;
 use parentcontrol_core::calendar::TimeOfDay;
 use parentcontrol_core::schedule::{DaySchedule, MAX_DAILY_QUOTA, TimeWindow, WeekSchedule};
 use parentcontrol_core::units::Minutes;
 
-use crate::panel::format;
+use crate::panel::format::{self, Percent};
 
 /// Days in display order with their form keys.
 pub(super) const WEEK: [(Weekday, &str); 7] = [
@@ -22,8 +20,6 @@ pub(super) const WEEK: [(Weekday, &str); 7] = [
     (Weekday::Saturday, "saturday"),
     (Weekday::Sunday, "sunday"),
 ];
-
-const MINUTES_PER_DAY: f64 = 24.0 * 60.0;
 
 /// One window as typed: `HH:MM` strings, possibly empty.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -43,16 +39,6 @@ impl WindowField {
 pub(super) struct Segment {
     pub(super) from: Percent,
     pub(super) length: Percent,
-}
-
-/// A percentage written with one decimal, for inline styles.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Percent(f64);
-
-impl fmt::Display for Percent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.1}%", self.0)
-    }
 }
 
 /// One day of the form.
@@ -183,8 +169,8 @@ impl DayField {
     pub(super) fn preview(&self, day_start: TimeOfDay) -> Vec<Segment> {
         if self.all_day {
             return vec![Segment {
-                from: Percent(0.0),
-                length: Percent(100.0),
+                from: Percent::of(0.0, 1.0),
+                length: Percent::of(1.0, 1.0),
             }];
         }
         self.windows
@@ -193,14 +179,10 @@ impl DayField {
                 let start = field.start.trim().parse::<TimeOfDay>().ok()?;
                 let end = field.end.trim().parse::<TimeOfDay>().ok()?;
                 let span = TimeWindow::new(start, end).ok()?.span(day_start)?;
-                let minutes = |offset: std::time::Duration| {
-                    f64::from(u32::try_from(offset.as_secs() / 60).unwrap_or(0))
-                };
+                let day = std::time::Duration::from_hours(24);
                 Some(Segment {
-                    from: Percent(minutes(span.start) / MINUTES_PER_DAY * 100.0),
-                    length: Percent(
-                        (minutes(span.end) - minutes(span.start)) / MINUTES_PER_DAY * 100.0,
-                    ),
+                    from: Percent::of_duration(span.start, day),
+                    length: Percent::of_duration(span.end.saturating_sub(span.start), day),
                 })
             })
             .collect()
