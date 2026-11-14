@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Подключение: {{ name }}</h1>
+
+<section class="card">
+  <p>Код подключения, действует до {{ expires }}, одноразовый:</p>
+  <p class="code-big code">{{ code }}</p>
+</section>
+
+<section class="card">
+  <h2>Linux</h2>
+  <p>В терминале на этом компьютере от имени администратора:</p>
+  <pre>sudo parentcontrol-agent enroll --server {{ server }} --code {{ code }}</pre>
+  <h2>Windows</h2>
+  <p>В PowerShell, запущенном от имени администратора:</p>
+  <pre>parentcontrol-agent.exe enroll --server {{ server }} --code {{ code }}</pre>
+  <p class="muted">
+    Агент покажет отпечаток сертификата сервера. Он должен совпадать с этим:<br>
+    <span class="code">{{ fingerprint }}</span>
+  </p>
+</section>
+
+<p><a href="/devices">← К устройствам</a>. После подключения привяжите на этой странице учётную запись ребёнка.</p>
+{% endblock %}

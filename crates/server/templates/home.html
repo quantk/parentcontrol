@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block head %}<meta http-equiv="refresh" content="30">{% endblock %}
+
+{% block content %}
+<h1>Сегодня, {{ today }}</h1>
+
+{% if groups.is_empty() %}
+<div class="card">
+  <p>Групп программ пока нет. <a href="/groups">Создайте группу</a>, например «Игры» с Minecraft.</p>
+</div>
+{% endif %}
+
+<div class="grid">
+  {% for group in groups %}
+  <section class="card">
+    <h2>{{ group.name }}</h2>
+    <div class="big">{{ group.remaining }}</div>
+    <div class="muted">осталось · использовано {{ group.used }} из {{ group.allowance }}</div>
+    <p class="{{ group.tone }}">{{ group.state }}</p>
+    <div class="actions">
+      {% for minutes in bonuses %}
+      <form method="post" action="/groups/{{ group.id }}/bonus">
+        <input type="hidden" name="minutes" value="{{ minutes }}">
+        <button type="submit">+{{ minutes }} мин</button>
+      </form>
+      {% endfor %}
+      {% if group.blocked %}
+      <form method="post" action="/groups/{{ group.id }}/unblock"><button type="submit" class="primary">Разблокировать</button></form>
+      {% else %}
+      <form method="post" action="/groups/{{ group.id }}/block"><button type="submit" class="danger">Заблокировать</button></form>
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+<section class="card">
+  <h2>Играют сейчас</h2>
+  {% if playing.is_empty() %}
+  <p class="muted">Никто.</p>
+  {% else %}
+  <ul class="plain">
+    {% for row in playing %}<li><span>{{ row.device }}</span><span>{{ row.groups }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Устройства</h2>
+  {% if devices.is_empty() %}
+  <p class="muted">Нет подключённых устройств. <a href="/devices">Подключить</a>.</p>
+  {% else %}
+  <ul class="plain">
+    {% for device in devices %}
+    <li>
+      <span>{{ device.name }}{% if !device.configured %} <span class="warn">· не настроено</span>{% endif %}</span>
+      {% if device.online %}<span class="ok">в сети</span>
+      {% else if device.stale %}<span class="bad">нет связи · {{ device.seen }}</span>
+      {% else %}<span class="muted">{{ device.seen }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

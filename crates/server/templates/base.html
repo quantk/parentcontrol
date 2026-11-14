@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ layout.title }} — Родительский контроль</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <nav>
+      {% for (path, label) in [("/", "Главная"), ("/groups", "Группы"), ("/schedule", "Расписание"), ("/devices", "Устройства"), ("/history", "История"), ("/settings", "Настройки")] %}
+      <a href="{{ path }}"{% if *path == layout.active %} class="active"{% endif %}>{{ label }}</a>
+      {% endfor %}
+      <form method="post" action="/logout"><button type="submit">Выйти</button></form>
+    </nav>
+  </header>
+  <main>
+    {% if let Some(error) = layout.error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

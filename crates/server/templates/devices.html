@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Устройства</h1>
+
+{% for device in devices %}
+<section class="card">
+  <form class="inline" method="post" action="/devices/{{ device.id }}/rename">
+    <input name="name" value="{{ device.name }}" maxlength="60" required aria-label="Название устройства">
+    <button type="submit">Переименовать</button>
+  </form>
+  <p>
+    {% if !device.enrolled %}<span class="warn">Ожидает подключения агента</span>
+    {% else if device.online %}<span class="ok">В сети</span>
+    {% else if device.stale %}<span class="bad">Давно нет связи</span>
+    {% else %}<span class="muted">Не в сети</span>{% endif %}
+    {% if device.enrolled %}<span class="muted"> · {{ device.platform }} · связь: {{ device.seen }}</span>{% endif %}
+  </p>
+
+  {% if device.enrolled %}
+  <h2>Учётные записи ребёнка</h2>
+  {% if device.bound.is_empty() %}
+  <p class="warn">Не настроено: ни одна учётная запись не привязана, устройство ничего не ограничивает.</p>
+  {% else %}
+  <ul class="plain">
+    {% for user in device.bound %}
+    <li>
+      <span class="code">{{ user }}</span>
+      <form method="post" action="/devices/{{ device.id }}/unbind">
+        <input type="hidden" name="user" value="{{ user }}">
+        <button type="submit" class="danger">Отвязать</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if !device.unbound.is_empty() %}
+  <form class="inline" method="post" action="/devices/{{ device.id }}/bind" style="margin-top: 12px">
+    <select name="user" aria-label="Учётная запись">
+      {% for user in device.unbound %}<option value="{{ user }}">{{ user }}</option>{% endfor %}
+    </select>
+    <button type="submit">Привязать к ребёнку</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  <div class="actions">
+    <form method="post" action="/devices/{{ device.id }}/code"><button type="submit">Новый код подключения</button></form>
+    <form method="post" action="/devices/{{ device.id }}/delete"
+          onsubmit="return confirm('Удалить устройство? Агент на нём перестанет получать настройки.')">
+      <button type="submit" class="danger">Удалить</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Подключить новое устройство</h2>
+  <form class="inline" method="post" action="/devices">
+    <input name="name" placeholder="Например, ПК в детской" maxlength="60" required aria-label="Название нового устройства">
+    <button type="submit" class="primary">Получить код</button>
+  </form>
+</section>
+
+<p class="muted">Отпечаток сертификата сервера: <span class="code">{{ fingerprint }}</span></p>
+{% endblock %}

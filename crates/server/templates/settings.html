@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Настройки</h1>
+
+<section class="card">
+  <h2>Календарь</h2>
+  <p class="muted">По этому часовому поясу считаются окна и сутки на всех компьютерах, независимо от их собственных часов.</p>
+  <form method="post" action="/settings/calendar" class="inline">
+    <label>Часовой пояс <input name="time_zone" value="{{ time_zone }}" required></label>
+    <label>Начало суток <input name="day_start" value="{{ day_start }}" pattern="[0-2][0-9]:[0-5][0-9]" required style="width: 6em"></label>
+    <button type="submit">Сохранить</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Пароль</h2>
+  <form method="post" action="/settings/password">
+    <p><input type="password" name="current" placeholder="Текущий пароль" autocomplete="current-password" required></p>
+    <p><input type="password" name="new" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" minlength="8" required></p>
+    <p><input type="password" name="repeat" placeholder="Повторите новый пароль" autocomplete="new-password" minlength="8" required></p>
+    <button type="submit">Сменить пароль</button>
+  </form>
+  <p class="muted">После смены пароля все входы, в том числе этот, завершатся.</p>
+</section>
+{% endblock %}

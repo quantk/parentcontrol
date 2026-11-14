@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>История</h1>
+
+<section class="card">
+  <h2>По дням</h2>
+  <p class="muted">Норма — по текущему расписанию плюс бонусы того дня. «Офлайн» — часть времени насчитана без связи с сервером, поэтому возможен перерасход.</p>
+  <div class="scroll">
+    <table>
+      <tr><th>День</th><th>Группа</th><th>Использовано</th><th>По устройствам</th></tr>
+      {% for row in days %}
+      {% if row.cells.is_empty() %}
+      <tr><td><a href="/history?day={{ row.day }}">{{ row.label }}</a></td><td colspan="3" class="muted">—</td></tr>
+      {% else %}
+      {% for cell in row.cells %}
+      <tr>
+        <td>{% if loop.first %}<a href="/history?day={{ row.day }}">{{ row.label }}</a>{% endif %}</td>
+        <td>{{ cell.group }}</td>
+        <td>
+          {{ cell.used }} из {{ cell.allowance }}
+          {% if let Some(overspend) = cell.overspend %}<br><span class="bad">перерасход {{ overspend }}</span>{% endif %}
+          {% if cell.offline %}<br><span class="warn">офлайн</span>{% endif %}
+        </td>
+        <td class="muted">{{ cell.devices }}</td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Сеансы за {{ selected }}</h2>
+  {% if sessions.is_empty() %}
+  <p class="muted">Сеансов нет.</p>
+  {% else %}
+  <div class="scroll">
+    <table>
+      <tr><th>Начало</th><th>Устройство</th><th>Группа</th><th>Длительность</th></tr>
+      {% for session in sessions %}
+      <tr>
+        <td>{{ session.start }}</td>
+        <td>{{ session.device }}</td>
+        <td>{{ session.group }}</td>
+        <td>{{ session.duration }}{% if session.offline %} <span class="warn">офлайн</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Действия родителя</h2>
+  {% if actions.is_empty() %}
+  <p class="muted">Пока ничего.</p>
+  {% else %}
+  <ul class="plain">
+    {% for action in actions %}<li><span>{{ action.summary }}</span><span class="muted">{{ action.at }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

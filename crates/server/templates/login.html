@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — Родительский контроль</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="login">
+    <div class="card">
+      <h1>Родительский контроль</h1>
+      {% if no_password %}
+      <p>Пароль ещё не задан. Задайте его на сервере:</p>
+      <pre>docker compose run --rm server set-password</pre>
+      {% else %}
+      {% if failed %}<div class="error">Неверный пароль.</div>{% endif %}
+      <form method="post" action="/login">
+        <input type="password" name="password" placeholder="Пароль" autocomplete="current-password" autofocus required>
+        <button type="submit" class="primary">Войти</button>
+      </form>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

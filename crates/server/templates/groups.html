@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Группы и правила</h1>
+<p class="muted">Ограничиваются только программы из групп. Квота и расписание задаются на группу.</p>
+
+{% for group in groups %}
+<section class="card">
+  <form class="inline" method="post" action="/groups/{{ group.id }}/rename">
+    <input name="name" value="{{ group.name }}" maxlength="60" required aria-label="Название группы">
+    <button type="submit">Переименовать</button>
+  </form>
+
+  <h2 style="margin-top: 16px">Правила</h2>
+  {% if group.rules.is_empty() %}
+  <p class="warn">Правил нет — группа ничего не ограничивает.</p>
+  {% else %}
+  <ul class="plain">
+    {% for rule in group.rules %}
+    <li>
+      <span class="code">{{ rule.text }}</span>
+      <form method="post" action="/rules/{{ rule.id }}/delete"><button type="submit" class="danger">Удалить</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form class="inline" method="post" action="/groups/{{ group.id }}/rules" style="margin-top: 12px">
+    <select name="kind" aria-label="Тип правила">
+      <option value="minecraft_java">Minecraft Java Edition</option>
+      <option value="executable">Имя исполняемого файла</option>
+      <option value="path_glob">Путь (glob, например /opt/games/**)</option>
+      <option value="command_line_contains">Командная строка содержит</option>
+      <option value="command_line_regex">Командная строка, регулярное выражение</option>
+    </select>
+    <input name="value" placeholder="значение (не нужно для Minecraft)" aria-label="Значение">
+    <button type="submit">Добавить правило</button>
+  </form>
+
+  <form method="post" action="/groups/{{ group.id }}/delete" style="margin-top: 16px"
+        onsubmit="return confirm('Удалить группу? История использования сохранится.')">
+    <button type="submit" class="danger">Удалить группу</button>
+  </form>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Новая группа</h2>
+  <form class="inline" method="post" action="/groups">
+    <input name="name" placeholder="Например, Игры" maxlength="60" required aria-label="Название новой группы">
+    <button type="submit" class="primary">Создать</button>
+  </form>
+</section>
+{% endblock %}

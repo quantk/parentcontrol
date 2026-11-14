@@ -1,6 +1,8 @@
 # Developer commands. Run `just` to list them.
 
 windows_target := "x86_64-pc-windows-gnu"
+# The server runs only in a Linux container; everything else ships to Windows too.
+windows_crates := "-p parentcontrol-core -p parentcontrol-agent -p parentcontrol-tray"
 
 [private]
 default:
@@ -27,7 +29,7 @@ clippy:
 
 # Lint the Windows code paths without leaving Linux.
 clippy-windows:
-    cargo clippy --workspace --all-targets --locked --target {{windows_target}} -- -D warnings
+    cargo clippy {{windows_crates}} --all-targets --locked --target {{windows_target}} -- -D warnings
 
 # Run the test suite.
 test:
@@ -35,7 +37,7 @@ test:
 
 # Cross-compile the Windows binaries to prove they link.
 build-windows:
-    cargo build --workspace --locked --target {{windows_target}}
+    cargo build {{windows_crates}} --locked --target {{windows_target}}
 
 # Licenses, advisories, duplicate crates and sources.
 deny:

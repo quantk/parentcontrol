@@ -12,6 +12,12 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # Unmaintained, not vulnerable. Only askama's template proc-macro uses it,
+    # at compile time, to read an optional config file this project lacks.
+    # Revisit when askama replaces it.
+    { id = "RUSTSEC-2026-0374", reason = "compile-time only, via askama_derive" },
+]
 
 [licenses]
 version = 2

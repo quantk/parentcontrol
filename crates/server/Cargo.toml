@@ -1,6 +1,6 @@
 [package]
 name = "parentcontrol-server"
-description = "HTTP API for agents, parent web panel and storage for parentcontrol"
+description = "HTTP API for agents, parent web panel and storage for parentcontrol (Linux only)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,34 @@ publish.workspace = true
 
 [dependencies]
 parentcontrol-core.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+askama.workspace = true
+axum.workspace = true
+axum-server.workspace = true
+clap = { workspace = true, features = ["env"] }
+getrandom.workspace = true
+jiff.workspace = true
+rcgen.workspace = true
+rpassword.workspace = true
+rusqlite.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_urlencoded.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-rustls.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+tokio-tungstenite.workspace = true
 
 [lints]
 workspace = true

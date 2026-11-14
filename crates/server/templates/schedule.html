@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Расписание</h1>
+<p class="muted">
+  Квота — сколько минут в день можно играть. Окна — когда можно играть, через запятую,
+  например <code>16:00-20:00, 21:00-22:00</code>; пусто — весь день. Сутки начинаются в {{ day_start }},
+  поэтому окно может переходить через полночь, но не через {{ day_start }}.
+</p>
+
+{% if groups.is_empty() %}
+<div class="card"><p>Сначала <a href="/groups">создайте группу</a>.</p></div>
+{% endif %}
+
+{% for group in groups %}
+<section class="card">
+  <h2>{{ group.name }}</h2>
+  <form method="post" action="/groups/{{ group.id }}/schedule">
+    <div class="scroll">
+      <table>
+        <tr><th>День</th><th>Квота, мин</th><th>Окна</th></tr>
+        {% for day in group.days %}
+        <tr>
+          <td>{{ day.label }}</td>
+          <td><input type="number" name="quota_{{ day.key }}" value="{{ day.quota }}" min="0" max="1440" required style="width: 6em"></td>
+          <td><input name="windows_{{ day.key }}" value="{{ day.windows }}" placeholder="весь день" style="width: 100%"></td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="actions"><button type="submit" class="primary">Сохранить</button></div>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}
