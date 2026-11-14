@@ -45,6 +45,9 @@
             # instead of being put on PATH so its setup hooks do not leak
             # Windows flags into host builds.
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${mingw.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
+            # C parts of dependencies (ring) compiled by the `cc` crate.
+            CC_x86_64_pc_windows_gnu = "${mingw.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
+            AR_x86_64_pc_windows_gnu = "${mingw.stdenv.cc.bintools.bintools}/bin/x86_64-w64-mingw32-ar";
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS = "-L native=${mingw.windows.pthreads}/lib";
             # rustc calls `x86_64-w64-mingw32-dlltool` by name for import
             # libraries; the unwrapped binutils carry no setup hooks.
