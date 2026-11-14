@@ -17,6 +17,12 @@ ignore = [
     # at compile time, to read an optional config file this project lacks.
     # Revisit when askama replaces it.
     { id = "RUSTSEC-2026-0374", reason = "compile-time only, via askama_derive" },
+    # zbus 6 absorbed these crates, so the standalone ones are unmaintained,
+    # not vulnerable. ksni 0.3 (the tray icon on Linux) still uses zbus 5,
+    # and the tray shares that zbus. Revisit when ksni moves to zbus 6.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant merged into zbus 6; ksni needs zbus 5" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names merged into zbus 6; ksni needs zbus 5" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive merged into zbus 6; ksni needs zbus 5" },
 ]
 
 [licenses]
@@ -32,6 +38,7 @@ allow = [
     "BSD-3-Clause",
     "ISC",
     "MIT",
+    "Unlicense",
     "Unicode-3.0",
     "Zlib",
 ]

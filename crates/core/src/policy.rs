@@ -169,6 +169,12 @@ impl Policy {
         self.accounts.contains(user)
     }
 
+    /// The accounts the policy limits.
+    #[must_use]
+    pub const fn accounts(&self) -> &BTreeSet<OsUser> {
+        &self.accounts
+    }
+
     /// The limited groups.
     #[must_use]
     pub fn groups(&self) -> &[GroupPolicy] {

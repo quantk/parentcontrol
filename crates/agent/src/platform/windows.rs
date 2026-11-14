@@ -4,6 +4,7 @@
 
 mod accounts;
 mod install;
+mod pipe;
 mod processes;
 mod security;
 mod service;
@@ -16,7 +17,9 @@ use parentcontrol_core::enforcement::Termination;
 use parentcontrol_core::process::{OsUser, ProcessId, ProcessInfo, ProcessInspector};
 use parentcontrol_core::protocol::DevicePlatform;
 
-use super::{Platform, PlatformError, ServiceBody};
+use tokio::sync::mpsc;
+
+use super::{Platform, PlatformError, ServiceBody, TrayClient};
 
 /// The Windows platform.
 #[derive(Debug, Default)]
@@ -36,6 +39,10 @@ impl Platform for Native {
             Termination::Forced => processes::terminate(process)
                 .map_err(PlatformError::io(format!("terminating process {process}"))),
         }
+    }
+
+    fn closes_softly(&self) -> bool {
+        false
     }
 }
 
@@ -81,6 +88,12 @@ pub(crate) async fn shutdown_signal() -> io::Result<()> {
         () = interrupted => Ok(()),
         () = service::stop_requested() => Ok(()),
     }
+}
+
+/// Listens for trays on the named pipe and hands each connection, with
+/// the account it comes from, to `clients`.
+pub(crate) fn listen_for_trays(clients: mpsc::Sender<TrayClient>) -> Result<(), PlatformError> {
+    pipe::listen(clients).map_err(PlatformError::io("listening for trays"))
 }
 
 /// Runs `body` as the Windows service.

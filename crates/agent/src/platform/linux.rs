@@ -12,12 +12,15 @@ use std::path::{Path, PathBuf};
 use parentcontrol_core::enforcement::Termination;
 use parentcontrol_core::process::{OsUser, ProcessId, ProcessInfo, ProcessInspector};
 use parentcontrol_core::protocol::DevicePlatform;
+use parentcontrol_core::tray;
 use rustix::io::Errno;
 use rustix::process::{Pid, Signal};
+use tokio::net::UnixListener;
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::mpsc;
 use tracing::warn;
 
-use super::{Platform, PlatformError, ServiceBody};
+use super::{Platform, PlatformError, ServiceBody, TrayClient};
 
 /// The Linux platform.
 #[derive(Debug, Default)]
@@ -47,6 +50,11 @@ impl Platform for Native {
                 source: errno.into(),
             }),
         }
+    }
+
+    fn closes_softly(&self) -> bool {
+        // `SIGTERM` lets a program save and quit.
+        true
     }
 }
 
@@ -113,6 +121,55 @@ fn unsupported(action: &str) -> PlatformError {
         action: action.to_owned(),
         source: io::ErrorKind::Unsupported.into(),
     }
+}
+
+/// Listens for trays on the Unix socket and hands each connection, with
+/// the account it comes from, to `clients`.
+pub(crate) fn listen_for_trays(clients: mpsc::Sender<TrayClient>) -> Result<(), PlatformError> {
+    let path = std::env::var_os(tray::SOCKET_ENV)
+        .map_or_else(|| PathBuf::from(tray::UNIX_SOCKET), PathBuf::from);
+    let action = || format!("listening on {}", path.display());
+    if let Some(dir) = path.parent() {
+        DirBuilder::new()
+            .recursive(true)
+            .mode(0o755)
+            .create(dir)
+            .map_err(PlatformError::io(action()))?;
+    }
+    match fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(PlatformError::io(action())(error)),
+    }
+    let listener = UnixListener::bind(&path).map_err(PlatformError::io(action()))?;
+    // Every user's tray may connect; what it learns is only shown to them.
+    fs::set_permissions(&path, Permissions::from_mode(0o666))
+        .map_err(PlatformError::io(action()))?;
+    tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((stream, _)) => {
+                    let uid = stream.peer_cred().ok().map(|credentials| credentials.uid());
+                    let user = uid.and_then(|uid| passwd::Users::load().ok()?.name(uid).cloned());
+                    if clients
+                        .send(TrayClient {
+                            user,
+                            stream: Box::new(stream),
+                        })
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                Err(error) => {
+                    warn!(%error, "cannot accept a tray connection");
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+    });
+    Ok(())
 }
 
 /// Resolves when the service manager or an operator asks the agent to stop.

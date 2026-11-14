@@ -1,4 +1,5 @@
-use parentcontrol_core::enforcement::Termination;
+use parentcontrol_core::enforcement::{Notice, Termination};
+use parentcontrol_core::process::OsUser;
 
 use super::*;
 use crate::test_support::{FakeClock, FakePlatform, minecraft, policy};
@@ -104,4 +105,37 @@ fn long_gap_between_steps_is_not_credited() {
     limiter.step(&policy, Duration::from_hours(2), true);
     let day = policy.calendar().locate(clock.now()).day;
     assert_eq!(limiter.journal().usage(GroupId::new(1), day), STEP * 2);
+}
+
+#[test]
+fn without_soft_close_the_tray_of_the_owner_is_asked() {
+    let platform = FakePlatform {
+        needs_tray_to_close: true,
+        ..FakePlatform::default()
+    };
+    let (clock, policy) = (FakeClock::at(INSIDE_WINDOW), policy(1));
+    platform.processes.borrow_mut().push(minecraft(100, "kid"));
+    let mut limiter = Limiter::new(&platform, &clock, Journal::default(), STEP);
+    run_steps(&mut limiter, &policy, 11);
+    let outcome = limiter.step(&policy, STEP, true);
+    let owner = OsUser::new("kid");
+    assert_eq!(outcome.soft_close, [(owner, minecraft(100, "kid").id)]);
+    assert_eq!(
+        *platform.terminated.borrow(),
+        [],
+        "nothing is signalled directly"
+    );
+}
+
+#[test]
+fn notices_are_returned_for_the_tray() {
+    let (platform, clock, policy) = (
+        FakePlatform::default(),
+        FakeClock::at(INSIDE_WINDOW),
+        policy(1),
+    );
+    platform.processes.borrow_mut().push(minecraft(100, "kid"));
+    let mut limiter = Limiter::new(&platform, &clock, Journal::default(), STEP);
+    let outcome = limiter.step(&policy, STEP, true);
+    assert!(matches!(outcome.notices[..], [Notice::Warning { .. }]));
 }

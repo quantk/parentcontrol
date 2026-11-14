@@ -58,6 +58,8 @@ pub(crate) fn minecraft(pid: u32, user: &str) -> ProcessInfo {
 pub(crate) struct FakePlatform {
     pub(crate) processes: RefCell<Vec<ProcessInfo>>,
     pub(crate) terminated: RefCell<Vec<(u32, Termination)>>,
+    /// Behave like Windows: soft closing needs the tray.
+    pub(crate) needs_tray_to_close: bool,
 }
 
 impl Platform for FakePlatform {
@@ -68,6 +70,10 @@ impl Platform for FakePlatform {
     fn terminate(&self, process: ProcessId, mode: Termination) -> Result<(), PlatformError> {
         self.terminated.borrow_mut().push((process.pid(), mode));
         Ok(())
+    }
+
+    fn closes_softly(&self) -> bool {
+        !self.needs_tray_to_close
     }
 }
 
@@ -101,6 +107,10 @@ impl Platform for &FakePlatform {
 
     fn terminate(&self, process: ProcessId, mode: Termination) -> Result<(), PlatformError> {
         (**self).terminate(process, mode)
+    }
+
+    fn closes_softly(&self) -> bool {
+        (**self).closes_softly()
     }
 }
 

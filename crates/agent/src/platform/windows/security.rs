@@ -1,4 +1,5 @@
-//! A directory only administrators and `SYSTEM` can access.
+//! Security descriptors: an administrators-only data directory and the
+//! tray pipe.
 
 use std::path::Path;
 use std::{fs, io, ptr};
@@ -19,44 +20,67 @@ use super::wide::to_wide;
 /// everything inside, with inheritance from the parent cut off (`P`).
 const ADMINS_ONLY: &str = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
 
+/// A self-relative security descriptor built from SDDL.
+#[derive(Debug)]
+pub(super) struct SecurityDescriptor(PSECURITY_DESCRIPTOR);
+
+// SAFETY: the descriptor is plain memory from `LocalAlloc`, owned
+// exclusively by this value and not tied to the creating thread.
+unsafe impl Send for SecurityDescriptor {}
+
+impl SecurityDescriptor {
+    /// Parses an SDDL string such as `D:P(A;;GA;;;SY)`.
+    pub(super) fn from_sddl(sddl: &str) -> io::Result<Self> {
+        let sddl = to_wide(sddl);
+        let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+        // SAFETY: `sddl` is NUL-terminated; ownership of the result passes
+        // to `Self`, which frees it.
+        let ok = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &raw mut descriptor,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self(descriptor))
+    }
+
+    /// The raw descriptor, valid while `self` lives.
+    pub(super) const fn as_ptr(&self) -> PSECURITY_DESCRIPTOR {
+        self.0
+    }
+}
+
+impl Drop for SecurityDescriptor {
+    fn drop(&mut self) {
+        // SAFETY: the descriptor was allocated for `LocalFree` and is
+        // freed only here.
+        unsafe { LocalFree(self.0) };
+    }
+}
+
 /// Creates `dir` if needed and replaces its permissions with
 /// [`ADMINS_ONLY`], including on everything already inside.
 pub(super) fn create_private_dir(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
+    let descriptor = SecurityDescriptor::from_sddl(ADMINS_ONLY)?;
 
-    let sddl = to_wide(ADMINS_ONLY);
-    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: `sddl` is NUL-terminated; the descriptor is freed below.
-    let ok = unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            sddl.as_ptr(),
-            SDDL_REVISION_1,
-            &raw mut descriptor,
-            ptr::null_mut(),
-        )
-    };
-    if ok == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let result = apply(dir, descriptor);
-    // SAFETY: the descriptor was allocated for `LocalFree` above.
-    unsafe { LocalFree(descriptor) };
-    result
-}
-
-fn apply(dir: &Path, descriptor: PSECURITY_DESCRIPTOR) -> io::Result<()> {
     let (mut present, mut defaulted) = (FALSE, FALSE);
     let mut dacl: *mut ACL = ptr::null_mut();
-    // SAFETY: `descriptor` is valid; the DACL points into it.
-    if unsafe {
+    // SAFETY: the descriptor is valid; the DACL points into it.
+    let ok = unsafe {
         GetSecurityDescriptorDacl(
-            descriptor,
+            descriptor.as_ptr(),
             &raw mut present,
             &raw mut dacl,
             &raw mut defaulted,
         )
-    } == 0
-    {
+    };
+    if ok == 0 {
         return Err(io::Error::last_os_error());
     }
     let path = to_wide(dir);

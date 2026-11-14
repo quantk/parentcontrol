@@ -1,12 +1,12 @@
-//! The agent's main loop: timing, files, the server link and the stop
-//! signal around the [`Limiter`].
+//! The agent's main loop: timing, files, the server link, the trays and
+//! the stop signal around the [`Limiter`].
 
 use std::time::Duration;
 
 use parentcontrol_core::clock::Clock as _;
 use tokio::sync::{mpsc, watch};
 use tokio::time::{Instant, MissedTickBehavior};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::clock::ServerClock;
 use crate::limiter::Limiter;
@@ -14,6 +14,7 @@ use crate::platform::{self, Platform};
 use crate::policy_file::PolicyFile;
 use crate::store::{Store, StoreError};
 use crate::sync::{self, Event};
+use crate::trays::Trays;
 
 /// How often processes are scanned; a forbidden launch lives at most this long.
 const SCAN_INTERVAL: Duration = Duration::from_secs(5);
@@ -32,6 +33,10 @@ pub(crate) async fn run(platform: impl Platform, store: Store) -> Result<(), Sto
     let (reports, report) = watch::channel(limiter.report());
     sync::spawn(store.link_path(), events_sender, report);
 
+    let mut trays = Trays::start()
+        .inspect_err(|error| warn!(%error, "trays cannot connect; limits apply without them"))
+        .ok();
+
     let mut ticks = tokio::time::interval(SCAN_INTERVAL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let shutdown = platform::shutdown_signal();
@@ -45,7 +50,16 @@ pub(crate) async fn run(platform: impl Platform, store: Store) -> Result<(), Sto
         tokio::select! {
             now = ticks.tick() => {
                 if let Some(policy) = policy.refresh() {
-                    limiter.step(policy, now - last_tick, online);
+                    let outcome = limiter.step(policy, now - last_tick, online);
+                    if let Some(trays) = &mut trays {
+                        trays.update(policy, limiter.statuses());
+                        for notice in outcome.notices {
+                            trays.notify(policy, notice);
+                        }
+                        for (owner, process) in outcome.soft_close {
+                            trays.close_windows(owner, process);
+                        }
+                    }
                 }
                 last_tick = now;
                 reports.send_if_modified(|current| {

@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::calendar::{DayPosition, TimeOfDay};
 use crate::ids::GroupId;
 use crate::policy::GroupPolicy;
@@ -10,7 +12,8 @@ use crate::policy::GroupPolicy;
 ///
 /// When several reasons hold, the one the child can do least about wins:
 /// a block, then the window, then the quota.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DenyReason {
     /// The parent has blocked the group.
     Blocked,
@@ -21,7 +24,8 @@ pub enum DenyReason {
 }
 
 /// What will end the current permission first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StopReason {
     /// The quota runs out.
     QuotaEnd,

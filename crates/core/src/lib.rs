@@ -19,6 +19,7 @@ pub mod process;
 pub mod protocol;
 pub mod rules;
 pub mod schedule;
+pub mod tray;
 pub mod units;
 pub mod usage;
 

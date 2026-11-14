@@ -17,6 +17,7 @@ mod store;
 mod sync;
 #[cfg(test)]
 mod test_support;
+mod trays;
 
 use std::fs::OpenOptions;
 use std::io::{self, IsTerminal as _};
